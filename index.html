@@ -115,6 +115,7 @@
       const resetButton = document.getElementById("reset-btn");
       const themeToggleButton = document.getElementById("theme-toggle-btn");
 
+      // 启动时先从 localStorage 恢复计数，异常值回退为 0。
       const rawSavedCount = localStorage.getItem(COUNT_STORAGE_KEY);
       const parsedCount = Number.parseInt(rawSavedCount ?? "0", 10);
       let count = Number.isNaN(parsedCount) ? 0 : parsedCount;
