@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hello Vibe Coding</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="card">
+      <h1>Hello Vibe Coding</h1>
+      <div class="stats">
+        <div>总点击次数：<strong id="count-value">0</strong></div>
+        <div>今日点击次数：<strong id="today-count-value">0</strong></div>
+        <div>历史最高点击次数（单日）：<strong id="max-daily-count-value">0</strong></div>
+      </div>
+
+      <section class="chart-panel">
+        <p>最近 7 天点击趋势（含今天）</p>
+        <canvas id="history-chart" width="560" height="220" aria-label="最近7天点击图表"></canvas>
+      </section>
+
+      <div class="actions">
+        <button id="increment-btn" type="button">点我 +1</button>
+        <button id="reset-btn" class="secondary-btn" type="button">重置总点击数</button>
+        <button id="theme-toggle-btn" class="secondary-btn" type="button">🌙 暗黑模式：关</button>
+        <button id="clear-all-btn" class="danger-btn" type="button">清空所有数据</button>
+        <button id="export-btn" class="secondary-btn" type="button">导出数据</button>
+        <button id="import-btn" class="secondary-btn" type="button">导入数据</button>
+      </div>
+
+      <input id="import-file-input" type="file" accept="application/json" hidden />
+      <p id="import-message" class="message" role="status" aria-live="polite"></p>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
