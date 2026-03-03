@@ -1,0 +1,281 @@
+const COUNT_STORAGE_KEY = "vibe-coding-lab-click-count";
+const THEME_STORAGE_KEY = "vibe-coding-lab-theme";
+const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
+
+const countElement = document.getElementById("count-value");
+const todayCountElement = document.getElementById("today-count-value");
+const maxDailyCountElement = document.getElementById("max-daily-count-value");
+// 图表默认显示在统计区域下方，不做条件隐藏。
+const historyChart = document.getElementById("history-chart");
+const incrementButton = document.getElementById("increment-btn");
+const resetButton = document.getElementById("reset-btn");
+const themeToggleButton = document.getElementById("theme-toggle-btn");
+const clearAllButton = document.getElementById("clear-all-btn");
+
+function getDateStringByOffset(offsetDays) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayDateString() {
+  // 使用本地时区的 YYYY-MM-DD，满足“按本地日期”统计。
+  return getDateStringByOffset(0);
+}
+
+function parseCount(value) {
+  const parsed = Number.parseInt(value ?? "0", 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+// 总点击数：单独存储，重置按钮只影响这一项。
+let count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
+
+// 读取并应用上次保存的主题。默认 light。
+let theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+
+// 每日统计数据结构：
+// {
+//   currentDate: "YYYY-MM-DD",
+//   todayCount: number,
+//   historyMaxDailyCount: number,
+//   historyByDate: { "YYYY-MM-DD": number }
+// }
+function getDefaultDailyStats() {
+  return {
+    currentDate: getTodayDateString(),
+    todayCount: 0,
+    historyMaxDailyCount: 0,
+    historyByDate: {},
+  };
+}
+
+function loadDailyStats() {
+  const raw = localStorage.getItem(DAILY_STATS_STORAGE_KEY);
+  if (!raw) {
+    return getDefaultDailyStats();
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      currentDate:
+        typeof parsed.currentDate === "string" ? parsed.currentDate : getTodayDateString(),
+      todayCount: parseCount(String(parsed.todayCount ?? "0")),
+      historyMaxDailyCount: parseCount(String(parsed.historyMaxDailyCount ?? "0")),
+      historyByDate:
+        parsed.historyByDate && typeof parsed.historyByDate === "object"
+          ? parsed.historyByDate
+          : {},
+    };
+  } catch {
+    return getDefaultDailyStats();
+  }
+}
+
+let dailyStats = loadDailyStats();
+
+function normalizeDailyStatsForToday() {
+  const today = getTodayDateString();
+  if (dailyStats.currentDate !== today) {
+    // 跨天：今日计数自动归零，但不要把当天 history 固定写成 0。
+    dailyStats.currentDate = today;
+    dailyStats.todayCount = 0;
+    persistDailyStats();
+    return true;
+  }
+  return false;
+}
+
+function syncDateAndRefresh() {
+  const didDateChange = normalizeDailyStatsForToday();
+  if (didDateChange) {
+    renderCounts();
+    drawRecentHistoryChart();
+  }
+}
+
+function getRecentSevenDaysData() {
+  // 取最近 7 天（含今天），缺失数据按 0。
+  const data = [];
+  for (let offset = -6; offset <= 0; offset += 1) {
+    const date = getDateStringByOffset(offset);
+    data.push({
+      date,
+      count: parseCount(String(dailyStats.historyByDate[date] ?? "0")),
+    });
+  }
+  return data;
+}
+
+function drawRecentHistoryChart() {
+  const ctx = historyChart.getContext("2d");
+  const data = getRecentSevenDaysData();
+
+  const styles = getComputedStyle(document.body);
+  const gridColor = styles.getPropertyValue("--chart-grid-color").trim();
+  const axisColor = styles.getPropertyValue("--chart-axis-color").trim();
+  const barColor = styles.getPropertyValue("--chart-bar-color").trim();
+  const labelColor = styles.getPropertyValue("--chart-label-color").trim();
+
+  const cssWidth = historyChart.clientWidth || 560;
+  const cssHeight = historyChart.clientHeight || 220;
+  const dpr = window.devicePixelRatio || 1;
+  historyChart.width = Math.floor(cssWidth * dpr);
+  historyChart.height = Math.floor(cssHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const margin = { top: 16, right: 10, bottom: 28, left: 34 };
+  const plotWidth = cssWidth - margin.left - margin.right;
+  const plotHeight = cssHeight - margin.top - margin.bottom;
+  const maxValue = Math.max(...data.map((item) => item.count), 1);
+
+  // 画网格线
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = margin.top + (plotHeight / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(margin.left, y);
+    ctx.lineTo(margin.left + plotWidth, y);
+    ctx.stroke();
+  }
+
+  // 坐标轴
+  ctx.strokeStyle = axisColor;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(margin.left, margin.top);
+  ctx.lineTo(margin.left, margin.top + plotHeight);
+  ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
+  ctx.stroke();
+
+  // 柱状图
+  const slotWidth = plotWidth / data.length;
+  const barWidth = Math.max(slotWidth * 0.56, 10);
+  ctx.fillStyle = barColor;
+
+  data.forEach((item, index) => {
+    const normalized = item.count / maxValue;
+    const barHeight = normalized * (plotHeight - 4);
+    const x = margin.left + slotWidth * index + (slotWidth - barWidth) / 2;
+    const y = margin.top + plotHeight - barHeight;
+    ctx.fillRect(x, y, barWidth, barHeight);
+  });
+
+  // 标签（x轴日期简写：MM-DD）和数值
+  ctx.fillStyle = labelColor;
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "center";
+
+  data.forEach((item, index) => {
+    const x = margin.left + slotWidth * index + slotWidth / 2;
+    const shortDate = item.date.slice(5);
+    ctx.fillText(shortDate, x, margin.top + plotHeight + 16);
+    ctx.fillText(String(item.count), x, margin.top + plotHeight - 6);
+  });
+}
+
+function renderCounts() {
+  countElement.textContent = String(count);
+  todayCountElement.textContent = String(dailyStats.todayCount);
+  maxDailyCountElement.textContent = String(dailyStats.historyMaxDailyCount);
+}
+
+function persistCount() {
+  localStorage.setItem(COUNT_STORAGE_KEY, String(count));
+}
+
+function persistDailyStats() {
+  localStorage.setItem(DAILY_STATS_STORAGE_KEY, JSON.stringify(dailyStats));
+}
+
+function incrementCounters() {
+  // 点击前先同步日期，避免系统日期变化后还写入旧日期。
+  normalizeDailyStatsForToday();
+
+  count += 1;
+  dailyStats.todayCount += 1;
+  const today = dailyStats.currentDate;
+  dailyStats.historyByDate[today] = dailyStats.todayCount;
+
+  if (dailyStats.todayCount > dailyStats.historyMaxDailyCount) {
+    dailyStats.historyMaxDailyCount = dailyStats.todayCount;
+  }
+
+  renderCounts();
+  drawRecentHistoryChart();
+  persistCount();
+  persistDailyStats();
+}
+
+function renderTheme() {
+  document.body.classList.toggle("theme-dark", theme === "dark");
+  themeToggleButton.textContent =
+    theme === "dark" ? "☀️ 暗黑模式：开" : "🌙 暗黑模式：关";
+  drawRecentHistoryChart();
+}
+
+function persistTheme() {
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
+
+incrementButton.addEventListener("click", () => {
+  incrementCounters();
+});
+
+resetButton.addEventListener("click", () => {
+  // 只重置总点击数，不影响“今日/历史”统计。
+  count = 0;
+  renderCounts();
+  persistCount();
+});
+
+themeToggleButton.addEventListener("click", () => {
+  theme = theme === "dark" ? "light" : "dark";
+  renderTheme();
+  persistTheme();
+});
+
+clearAllButton.addEventListener("click", () => {
+  const shouldClear = confirm("确认清空所有本地数据吗？此操作不可撤销。");
+  if (!shouldClear) {
+    return;
+  }
+
+  localStorage.removeItem(COUNT_STORAGE_KEY);
+  localStorage.removeItem(THEME_STORAGE_KEY);
+  localStorage.removeItem(DAILY_STATS_STORAGE_KEY);
+
+  count = 0;
+  theme = "light";
+  dailyStats = getDefaultDailyStats();
+
+  renderCounts();
+  renderTheme();
+});
+
+window.addEventListener("resize", () => {
+  drawRecentHistoryChart();
+});
+
+// 页面重新获得焦点时，同步系统日期变化并刷新统计/图表。
+window.addEventListener("focus", () => {
+  syncDateAndRefresh();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    syncDateAndRefresh();
+  }
+});
+
+syncDateAndRefresh();
+renderCounts();
+renderTheme();
