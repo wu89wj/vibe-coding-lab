@@ -14,6 +14,8 @@
         --button-hover-bg: #1d4ed8;
         --button-secondary-bg: #475569;
         --button-secondary-hover-bg: #334155;
+        --button-danger-bg: #dc2626;
+        --button-danger-hover-bg: #b91c1c;
         --shadow-color: rgba(15, 23, 42, 0.12);
       }
 
@@ -26,6 +28,8 @@
         --button-hover-bg: #2563eb;
         --button-secondary-bg: #64748b;
         --button-secondary-hover-bg: #475569;
+        --button-danger-bg: #ef4444;
+        --button-danger-hover-bg: #dc2626;
         --shadow-color: rgba(2, 6, 23, 0.45);
       }
 
@@ -41,7 +45,7 @@
       }
 
       .card {
-        width: min(90vw, 460px);
+        width: min(92vw, 520px);
         background: var(--card-bg);
         border-radius: 16px;
         padding: 28px;
@@ -55,14 +59,15 @@
         font-size: 1.8rem;
       }
 
-      .count {
-        margin: 0 0 18px;
-        font-size: 1.1rem;
+      .stats {
+        margin: 0 auto 18px;
+        text-align: left;
+        width: fit-content;
+        line-height: 1.7;
       }
 
-      #count-value {
+      .stats strong {
         font-weight: 700;
-        font-size: 1.5rem;
       }
 
       .actions {
@@ -93,42 +98,145 @@
       .secondary-btn:hover {
         background: var(--button-secondary-hover-bg);
       }
+
+      .danger-btn {
+        background: var(--button-danger-bg);
+      }
+
+      .danger-btn:hover {
+        background: var(--button-danger-hover-bg);
+      }
     </style>
   </head>
   <body>
     <main class="card">
       <h1>Hello Vibe Coding</h1>
-      <p class="count">当前点击次数：<span id="count-value">0</span></p>
+      <div class="stats">
+        <div>总点击次数：<strong id="count-value">0</strong></div>
+        <div>今日点击次数：<strong id="today-count-value">0</strong></div>
+        <div>历史最高点击次数（单日）：<strong id="max-daily-count-value">0</strong></div>
+      </div>
       <div class="actions">
         <button id="increment-btn" type="button">点我 +1</button>
-        <button id="reset-btn" class="secondary-btn" type="button">重置计数</button>
+        <button id="reset-btn" class="secondary-btn" type="button">重置总点击数</button>
         <button id="theme-toggle-btn" class="secondary-btn" type="button">🌙 暗黑模式：关</button>
+        <button id="clear-all-btn" class="danger-btn" type="button">清空所有数据</button>
       </div>
     </main>
 
     <script>
       const COUNT_STORAGE_KEY = "vibe-coding-lab-click-count";
       const THEME_STORAGE_KEY = "vibe-coding-lab-theme";
+      const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
 
       const countElement = document.getElementById("count-value");
+      const todayCountElement = document.getElementById("today-count-value");
+      const maxDailyCountElement = document.getElementById("max-daily-count-value");
       const incrementButton = document.getElementById("increment-btn");
       const resetButton = document.getElementById("reset-btn");
       const themeToggleButton = document.getElementById("theme-toggle-btn");
+      const clearAllButton = document.getElementById("clear-all-btn");
 
-      // 启动时先从 localStorage 恢复计数，异常值回退为 0。
-      const rawSavedCount = localStorage.getItem(COUNT_STORAGE_KEY);
-      const parsedCount = Number.parseInt(rawSavedCount ?? "0", 10);
-      let count = Number.isNaN(parsedCount) ? 0 : parsedCount;
+      function getTodayDateString() {
+        // 使用本地时区的 YYYY-MM-DD，满足“按本地日期”统计。
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const day = String(now.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
 
-      // 读取并应用上次保存的主题。默认使用 light。
+      function parseCount(value) {
+        const parsed = Number.parseInt(value ?? "0", 10);
+        return Number.isNaN(parsed) ? 0 : parsed;
+      }
+
+      // 总点击数：单独存储，重置按钮只影响这一项。
+      let count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
+
+      // 读取并应用上次保存的主题。默认 light。
       let theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
 
-      function renderCount() {
+      // 每日统计数据结构：
+      // {
+      //   currentDate: "YYYY-MM-DD",
+      //   todayCount: number,
+      //   historyMaxDailyCount: number,
+      //   historyByDate: { "YYYY-MM-DD": number }
+      // }
+      function getDefaultDailyStats() {
+        return {
+          currentDate: getTodayDateString(),
+          todayCount: 0,
+          historyMaxDailyCount: 0,
+          historyByDate: {},
+        };
+      }
+
+      function loadDailyStats() {
+        const raw = localStorage.getItem(DAILY_STATS_STORAGE_KEY);
+        if (!raw) {
+          return getDefaultDailyStats();
+        }
+
+        try {
+          const parsed = JSON.parse(raw);
+          return {
+            currentDate:
+              typeof parsed.currentDate === "string" ? parsed.currentDate : getTodayDateString(),
+            todayCount: parseCount(String(parsed.todayCount ?? "0")),
+            historyMaxDailyCount: parseCount(String(parsed.historyMaxDailyCount ?? "0")),
+            historyByDate:
+              parsed.historyByDate && typeof parsed.historyByDate === "object"
+                ? parsed.historyByDate
+                : {},
+          };
+        } catch {
+          return getDefaultDailyStats();
+        }
+      }
+
+      let dailyStats = loadDailyStats();
+
+      function normalizeDailyStatsForToday() {
+        const today = getTodayDateString();
+        if (dailyStats.currentDate !== today) {
+          // 跨天：今日计数自动归零，但历史记录保留。
+          dailyStats.currentDate = today;
+          dailyStats.todayCount = 0;
+          if (!dailyStats.historyByDate[today]) {
+            dailyStats.historyByDate[today] = 0;
+          }
+          persistDailyStats();
+        }
+      }
+
+      function renderCounts() {
         countElement.textContent = String(count);
+        todayCountElement.textContent = String(dailyStats.todayCount);
+        maxDailyCountElement.textContent = String(dailyStats.historyMaxDailyCount);
       }
 
       function persistCount() {
         localStorage.setItem(COUNT_STORAGE_KEY, String(count));
+      }
+
+      function persistDailyStats() {
+        localStorage.setItem(DAILY_STATS_STORAGE_KEY, JSON.stringify(dailyStats));
+      }
+
+      function incrementCounters() {
+        count += 1;
+        dailyStats.todayCount += 1;
+        dailyStats.historyByDate[dailyStats.currentDate] = dailyStats.todayCount;
+
+        if (dailyStats.todayCount > dailyStats.historyMaxDailyCount) {
+          dailyStats.historyMaxDailyCount = dailyStats.todayCount;
+        }
+
+        renderCounts();
+        persistCount();
+        persistDailyStats();
       }
 
       function renderTheme() {
@@ -142,14 +250,13 @@
       }
 
       incrementButton.addEventListener("click", () => {
-        count += 1;
-        renderCount();
-        persistCount();
+        incrementCounters();
       });
 
       resetButton.addEventListener("click", () => {
+        // 只重置总点击数，不影响“今日/历史”统计。
         count = 0;
-        renderCount();
+        renderCounts();
         persistCount();
       });
 
@@ -159,7 +266,26 @@
         persistTheme();
       });
 
-      renderCount();
+      clearAllButton.addEventListener("click", () => {
+        const shouldClear = confirm("确认清空所有本地数据吗？此操作不可撤销。");
+        if (!shouldClear) {
+          return;
+        }
+
+        localStorage.removeItem(COUNT_STORAGE_KEY);
+        localStorage.removeItem(THEME_STORAGE_KEY);
+        localStorage.removeItem(DAILY_STATS_STORAGE_KEY);
+
+        count = 0;
+        theme = "light";
+        dailyStats = getDefaultDailyStats();
+
+        renderCounts();
+        renderTheme();
+      });
+
+      normalizeDailyStatsForToday();
+      renderCounts();
       renderTheme();
     </script>
   </body>
