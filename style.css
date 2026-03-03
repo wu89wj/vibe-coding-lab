@@ -126,3 +126,21 @@ button:hover {
 .danger-btn:hover {
   background: var(--button-danger-hover-bg);
 }
+
+.message {
+  min-height: 1.4em;
+  margin: 12px 0 0;
+  font-size: 0.92rem;
+}
+
+.message.info {
+  color: var(--chart-axis-color);
+}
+
+.message.success {
+  color: #16a34a;
+}
+
+.message.error {
+  color: var(--button-danger-bg);
+}
