@@ -1,3 +1,5 @@
+console.log("[app] loaded");
+
 const COUNT_STORAGE_KEY = "vibe-coding-lab-click-count";
 const THEME_STORAGE_KEY = "vibe-coding-lab-theme";
 const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
@@ -365,6 +367,7 @@ function applyImportedBackup(backupObject) {
   renderCounts();
   renderTheme();
   showImportMessage("导入成功：数据已恢复并刷新页面状态。", "success");
+  console.log("[import] success");
 }
 
 function handleImportFileSelection(event) {
@@ -372,6 +375,8 @@ function handleImportFileSelection(event) {
   if (!file) {
     return;
   }
+
+  console.log("[import] file selected");
 
   const reader = new FileReader();
   reader.onload = () => {
@@ -394,7 +399,17 @@ function handleImportFileSelection(event) {
   event.target.value = "";
 }
 
-function bindEvents() {
+function bindUI() {
+  const missing = {
+    exportButton: !exportButton,
+    importButton: !importButton,
+    importFileInput: !importFileInput,
+  };
+  if (missing.exportButton || missing.importButton || missing.importFileInput) {
+    console.error("[bind] missing element", missing);
+    return;
+  }
+
   incrementButton.addEventListener("click", incrementCounters);
 
   resetButton.addEventListener("click", () => {
@@ -480,7 +495,7 @@ function initApp() {
   theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   dailyStats = loadDailyStats();
 
-  bindEvents();
+  bindUI();
   syncDateAndRefresh();
   renderCounts();
   renderTheme();
