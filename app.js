@@ -4,18 +4,22 @@ const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
 
 const PROJECT_STORAGE_KEYS = [COUNT_STORAGE_KEY, THEME_STORAGE_KEY, DAILY_STATS_STORAGE_KEY];
 
-const countElement = document.getElementById("count-value");
-const todayCountElement = document.getElementById("today-count-value");
-const maxDailyCountElement = document.getElementById("max-daily-count-value");
-const historyChart = document.getElementById("history-chart");
-const incrementButton = document.getElementById("increment-btn");
-const resetButton = document.getElementById("reset-btn");
-const themeToggleButton = document.getElementById("theme-toggle-btn");
-const clearAllButton = document.getElementById("clear-all-btn");
-const exportButton = document.getElementById("export-btn");
-const importButton = document.getElementById("import-btn");
-const importFileInput = document.getElementById("import-file-input");
-const importMessageElement = document.getElementById("import-message");
+let countElement;
+let todayCountElement;
+let maxDailyCountElement;
+let historyChart;
+let incrementButton;
+let resetButton;
+let themeToggleButton;
+let clearAllButton;
+let exportButton;
+let importButton;
+let importFileInput;
+let importMessageElement;
+
+let count = 0;
+let theme = "light";
+let dailyStats;
 
 function getDateStringByOffset(offsetDays) {
   const date = new Date();
@@ -37,6 +41,7 @@ function parseCount(value) {
 }
 
 function showImportMessage(message, type) {
+  if (!importMessageElement) return;
   importMessageElement.textContent = message;
   importMessageElement.className = `message ${type}`;
 }
@@ -81,10 +86,6 @@ function loadDailyStats() {
   }
 }
 
-let count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
-let theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
-let dailyStats = loadDailyStats();
-
 function normalizeDailyStatsForToday() {
   const today = getTodayDateString();
   if (dailyStats.currentDate !== today) {
@@ -117,6 +118,7 @@ function getRecentSevenDaysData() {
 }
 
 function drawRecentHistoryChart() {
+  if (!historyChart) return;
   const ctx = historyChart.getContext("2d");
   const data = getRecentSevenDaysData();
 
@@ -183,6 +185,7 @@ function drawRecentHistoryChart() {
 }
 
 function renderCounts() {
+  if (!countElement) return;
   countElement.textContent = String(count);
   todayCountElement.textContent = String(dailyStats.todayCount);
   maxDailyCountElement.textContent = String(dailyStats.historyMaxDailyCount);
@@ -202,8 +205,9 @@ function persistTheme() {
 
 function renderTheme() {
   document.body.classList.toggle("theme-dark", theme === "dark");
-  themeToggleButton.textContent =
-    theme === "dark" ? "☀️ 暗黑模式：开" : "🌙 暗黑模式：关";
+  if (themeToggleButton) {
+    themeToggleButton.textContent = theme === "dark" ? "☀️ 暗黑模式：开" : "🌙 暗黑模式：关";
+  }
   drawRecentHistoryChart();
 }
 
@@ -239,26 +243,33 @@ function clearAllData() {
 }
 
 function exportProjectData() {
-  const payload = {
-    exportedAt: new Date().toISOString(),
-    data: {
-      [COUNT_STORAGE_KEY]: localStorage.getItem(COUNT_STORAGE_KEY) ?? "0",
-      [THEME_STORAGE_KEY]: localStorage.getItem(THEME_STORAGE_KEY) ?? "light",
-      [DAILY_STATS_STORAGE_KEY]: localStorage.getItem(DAILY_STATS_STORAGE_KEY) ?? JSON.stringify(getDefaultDailyStats()),
-    },
-  };
+  console.log("[export] clicked");
+  try {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      data: {
+        [COUNT_STORAGE_KEY]: localStorage.getItem(COUNT_STORAGE_KEY) ?? "0",
+        [THEME_STORAGE_KEY]: localStorage.getItem(THEME_STORAGE_KEY) ?? "light",
+        [DAILY_STATS_STORAGE_KEY]:
+          localStorage.getItem(DAILY_STATS_STORAGE_KEY) ?? JSON.stringify(getDefaultDailyStats()),
+      },
+    };
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `vibe-coding-lab-backup-${getTodayDateString()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vibe-coding-lab-backup-${getTodayDateString()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 
-  showImportMessage("导出成功：备份文件已下载。", "success");
+    showImportMessage("导出成功：备份文件已下载。", "success");
+  } catch (error) {
+    console.error("[export] failed", error);
+    alert("导出失败，请打开控制台查看错误详情。");
+  }
 }
 
 function validateBackupObject(backupObject) {
@@ -329,7 +340,9 @@ function validateBackupObject(backupObject) {
 function applyImportedBackup(backupObject) {
   const validationError = validateBackupObject(backupObject);
   if (validationError) {
-    showImportMessage(`导入失败：${validationError}`, "error");
+    const message = `导入失败：${validationError}`;
+    showImportMessage(message, "error");
+    alert(message);
     return;
   }
 
@@ -365,57 +378,117 @@ function handleImportFileSelection(event) {
     try {
       const backupObject = JSON.parse(String(reader.result));
       applyImportedBackup(backupObject);
-    } catch {
+    } catch (error) {
+      console.error("[import] invalid JSON", error);
       showImportMessage("导入失败：文件不是合法 JSON。", "error");
+      alert("导入失败：文件不是合法 JSON。");
     }
   };
-  reader.onerror = () => {
+  reader.onerror = (error) => {
+    console.error("[import] file read failed", error);
     showImportMessage("导入失败：读取文件时发生错误。", "error");
+    alert("导入失败：读取文件时发生错误。");
   };
   reader.readAsText(file, "utf-8");
 
-  // 允许重复选择同一文件时也触发 change。
   event.target.value = "";
 }
 
-incrementButton.addEventListener("click", incrementCounters);
+function bindEvents() {
+  incrementButton.addEventListener("click", incrementCounters);
 
-resetButton.addEventListener("click", () => {
-  count = 0;
-  renderCounts();
-  persistCount();
-});
+  resetButton.addEventListener("click", () => {
+    count = 0;
+    renderCounts();
+    persistCount();
+  });
 
-themeToggleButton.addEventListener("click", () => {
-  theme = theme === "dark" ? "light" : "dark";
-  renderTheme();
-  persistTheme();
-});
+  themeToggleButton.addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    renderTheme();
+    persistTheme();
+  });
 
-clearAllButton.addEventListener("click", () => {
-  const shouldClear = confirm("确认清空所有本地数据吗？此操作不可撤销。");
-  if (!shouldClear) {
+  clearAllButton.addEventListener("click", () => {
+    const shouldClear = confirm("确认清空所有本地数据吗？此操作不可撤销。");
+    if (!shouldClear) {
+      return;
+    }
+    clearAllData();
+    showImportMessage("已清空所有数据。", "info");
+  });
+
+  exportButton.addEventListener("click", exportProjectData);
+
+  importButton.addEventListener("click", () => {
+    console.log("[import] clicked");
+    try {
+      importFileInput.click();
+    } catch (error) {
+      console.error("[import] failed to open file picker", error);
+      alert("导入失败：无法打开文件选择器。");
+    }
+  });
+
+  importFileInput.addEventListener("change", handleImportFileSelection);
+
+  window.addEventListener("resize", drawRecentHistoryChart);
+  window.addEventListener("focus", syncDateAndRefresh);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      syncDateAndRefresh();
+    }
+  });
+}
+
+function initApp() {
+  countElement = document.getElementById("count-value");
+  todayCountElement = document.getElementById("today-count-value");
+  maxDailyCountElement = document.getElementById("max-daily-count-value");
+  historyChart = document.getElementById("history-chart");
+  incrementButton = document.getElementById("increment-btn");
+  resetButton = document.getElementById("reset-btn");
+  themeToggleButton = document.getElementById("theme-toggle-btn");
+  clearAllButton = document.getElementById("clear-all-btn");
+  exportButton = document.getElementById("export-btn");
+  importButton = document.getElementById("import-btn");
+  importFileInput = document.getElementById("import-file-input");
+  importMessageElement = document.getElementById("import-message");
+
+  const requiredElements = [
+    countElement,
+    todayCountElement,
+    maxDailyCountElement,
+    historyChart,
+    incrementButton,
+    resetButton,
+    themeToggleButton,
+    clearAllButton,
+    exportButton,
+    importButton,
+    importFileInput,
+    importMessageElement,
+  ];
+
+  if (requiredElements.some((el) => !el)) {
+    console.error("[init] missing required DOM elements, app init aborted");
+    alert("页面初始化失败：缺少必要元素，请检查 HTML 结构。");
     return;
   }
-  clearAllData();
-  showImportMessage("已清空所有数据。", "info");
-});
 
-exportButton.addEventListener("click", exportProjectData);
-importButton.addEventListener("click", () => {
-  importFileInput.click();
-});
-importFileInput.addEventListener("change", handleImportFileSelection);
+  count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
+  theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+  dailyStats = loadDailyStats();
 
-window.addEventListener("resize", drawRecentHistoryChart);
-window.addEventListener("focus", syncDateAndRefresh);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
-    syncDateAndRefresh();
-  }
-});
+  bindEvents();
+  syncDateAndRefresh();
+  renderCounts();
+  renderTheme();
+  showImportMessage("", "info");
+}
 
-syncDateAndRefresh();
-renderCounts();
-renderTheme();
-showImportMessage("", "info");
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}

@@ -64,3 +64,4 @@ python3 -m http.server 8000
 - 2026-03-03: split frontend into `index.html` + `app.js` + `style.css` to reduce merge conflicts
 - 2026-03-03: fix cross-day date switch sync (do not prefill `historyByDate[today]=0`, refresh stats/chart on focus)
 - 2026-03-03: add JSON backup import/export (export download + validated import + overwrite confirm + instant UI/chart refresh)
+- 2026-03-03: fix export/import buttons binding + add click debug logs and alert/console error handling
