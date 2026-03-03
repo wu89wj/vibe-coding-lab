@@ -82,13 +82,20 @@ let dailyStats = loadDailyStats();
 function normalizeDailyStatsForToday() {
   const today = getTodayDateString();
   if (dailyStats.currentDate !== today) {
-    // 跨天：今日计数自动归零，但历史记录保留。
+    // 跨天：今日计数自动归零，但不要把当天 history 固定写成 0。
     dailyStats.currentDate = today;
     dailyStats.todayCount = 0;
-    if (!dailyStats.historyByDate[today]) {
-      dailyStats.historyByDate[today] = 0;
-    }
     persistDailyStats();
+    return true;
+  }
+  return false;
+}
+
+function syncDateAndRefresh() {
+  const didDateChange = normalizeDailyStatsForToday();
+  if (didDateChange) {
+    renderCounts();
+    drawRecentHistoryChart();
   }
 }
 
@@ -190,9 +197,13 @@ function persistDailyStats() {
 }
 
 function incrementCounters() {
+  // 点击前先同步日期，避免系统日期变化后还写入旧日期。
+  normalizeDailyStatsForToday();
+
   count += 1;
   dailyStats.todayCount += 1;
-  dailyStats.historyByDate[dailyStats.currentDate] = dailyStats.todayCount;
+  const today = dailyStats.currentDate;
+  dailyStats.historyByDate[today] = dailyStats.todayCount;
 
   if (dailyStats.todayCount > dailyStats.historyMaxDailyCount) {
     dailyStats.historyMaxDailyCount = dailyStats.todayCount;
@@ -254,6 +265,17 @@ window.addEventListener("resize", () => {
   drawRecentHistoryChart();
 });
 
-normalizeDailyStatsForToday();
+// 页面重新获得焦点时，同步系统日期变化并刷新统计/图表。
+window.addEventListener("focus", () => {
+  syncDateAndRefresh();
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    syncDateAndRefresh();
+  }
+});
+
+syncDateAndRefresh();
 renderCounts();
 renderTheme();

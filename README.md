@@ -36,6 +36,8 @@ python3 -m http.server 8000
 4. 页面中确认存在 `<canvas id="history-chart">`，位于统计区下方且默认可见。
 5. 清空或缺失 `historyByDate` 后刷新，图表仍显示（最近 7 天均为 0）。
 6. 点击“清空所有数据”出现确认框；确认后所有统计与主题重置。
+7. 改系统日期验收：将系统日期从 `2026-03-03` 改到 `2026-03-04` 后回到页面（或刷新），`todayCount` 应归零，但 `historyByDate` 不应预先写入 `2026-03-04: 0`。
+8. 在新日期点击“点我 +1”，应同时更新 `todayCount` 和 `historyByDate[今天]`，图表也应立即刷新显示新日期的点击值。
 
 ## GitHub Pages 发布
 
