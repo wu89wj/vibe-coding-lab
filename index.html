@@ -17,10 +17,6 @@
         --button-danger-bg: #dc2626;
         --button-danger-hover-bg: #b91c1c;
         --shadow-color: rgba(15, 23, 42, 0.12);
-        --chart-grid-color: #cbd5e1;
-        --chart-axis-color: #475569;
-        --chart-bar-color: #2563eb;
-        --chart-label-color: #334155;
       }
 
       body.theme-dark {
@@ -35,10 +31,6 @@
         --button-danger-bg: #ef4444;
         --button-danger-hover-bg: #dc2626;
         --shadow-color: rgba(2, 6, 23, 0.45);
-        --chart-grid-color: #334155;
-        --chart-axis-color: #94a3b8;
-        --chart-bar-color: #60a5fa;
-        --chart-label-color: #cbd5e1;
       }
 
       body {
@@ -53,7 +45,7 @@
       }
 
       .card {
-        width: min(94vw, 620px);
+        width: min(92vw, 520px);
         background: var(--card-bg);
         border-radius: 16px;
         padding: 28px;
@@ -76,25 +68,6 @@
 
       .stats strong {
         font-weight: 700;
-      }
-
-      .chart-panel {
-        margin: 16px auto 18px;
-        text-align: left;
-      }
-
-      .chart-panel p {
-        margin: 0 0 8px;
-        font-size: 0.95rem;
-      }
-
-      #history-chart {
-        width: 100%;
-        max-width: 560px;
-        height: 220px;
-        display: block;
-        margin: 0 auto;
-        border-radius: 10px;
       }
 
       .actions {
@@ -143,12 +116,6 @@
         <div>今日点击次数：<strong id="today-count-value">0</strong></div>
         <div>历史最高点击次数（单日）：<strong id="max-daily-count-value">0</strong></div>
       </div>
-
-      <section class="chart-panel">
-        <p>最近 7 天点击趋势（含今天）</p>
-        <canvas id="history-chart" width="560" height="220" aria-label="最近7天点击图表"></canvas>
-      </section>
-
       <div class="actions">
         <button id="increment-btn" type="button">点我 +1</button>
         <button id="reset-btn" class="secondary-btn" type="button">重置总点击数</button>
@@ -165,25 +132,18 @@
       const countElement = document.getElementById("count-value");
       const todayCountElement = document.getElementById("today-count-value");
       const maxDailyCountElement = document.getElementById("max-daily-count-value");
-      const historyChartCanvas = document.getElementById("history-chart");
       const incrementButton = document.getElementById("increment-btn");
       const resetButton = document.getElementById("reset-btn");
       const themeToggleButton = document.getElementById("theme-toggle-btn");
       const clearAllButton = document.getElementById("clear-all-btn");
 
-      function getDateStringByOffset(offsetDays) {
-        const date = new Date();
-        date.setHours(0, 0, 0, 0);
-        date.setDate(date.getDate() + offsetDays);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, "0");
-        const day = String(date.getDate()).padStart(2, "0");
-        return `${year}-${month}-${day}`;
-      }
-
       function getTodayDateString() {
         // 使用本地时区的 YYYY-MM-DD，满足“按本地日期”统计。
-        return getDateStringByOffset(0);
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const day = String(now.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
       }
 
       function parseCount(value) {
@@ -251,89 +211,6 @@
         }
       }
 
-      function getRecentSevenDaysData() {
-        // 取最近 7 天（含今天），缺失数据按 0。
-        const data = [];
-        for (let offset = -6; offset <= 0; offset += 1) {
-          const date = getDateStringByOffset(offset);
-          data.push({
-            date,
-            count: parseCount(String(dailyStats.historyByDate[date] ?? "0")),
-          });
-        }
-        return data;
-      }
-
-      function drawRecentHistoryChart() {
-        const ctx = historyChartCanvas.getContext("2d");
-        const data = getRecentSevenDaysData();
-
-        const styles = getComputedStyle(document.body);
-        const gridColor = styles.getPropertyValue("--chart-grid-color").trim();
-        const axisColor = styles.getPropertyValue("--chart-axis-color").trim();
-        const barColor = styles.getPropertyValue("--chart-bar-color").trim();
-        const labelColor = styles.getPropertyValue("--chart-label-color").trim();
-
-        const cssWidth = historyChartCanvas.clientWidth || 560;
-        const cssHeight = historyChartCanvas.clientHeight || 220;
-        const dpr = window.devicePixelRatio || 1;
-        historyChartCanvas.width = Math.floor(cssWidth * dpr);
-        historyChartCanvas.height = Math.floor(cssHeight * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        ctx.clearRect(0, 0, cssWidth, cssHeight);
-
-        const margin = { top: 16, right: 10, bottom: 28, left: 34 };
-        const plotWidth = cssWidth - margin.left - margin.right;
-        const plotHeight = cssHeight - margin.top - margin.bottom;
-        const maxValue = Math.max(...data.map((item) => item.count), 1);
-
-        // 画网格线
-        ctx.strokeStyle = gridColor;
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= 4; i += 1) {
-          const y = margin.top + (plotHeight / 4) * i;
-          ctx.beginPath();
-          ctx.moveTo(margin.left, y);
-          ctx.lineTo(margin.left + plotWidth, y);
-          ctx.stroke();
-        }
-
-        // 坐标轴
-        ctx.strokeStyle = axisColor;
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(margin.left, margin.top);
-        ctx.lineTo(margin.left, margin.top + plotHeight);
-        ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
-        ctx.stroke();
-
-        // 柱状图
-        const slotWidth = plotWidth / data.length;
-        const barWidth = Math.max(slotWidth * 0.56, 10);
-        ctx.fillStyle = barColor;
-
-        data.forEach((item, index) => {
-          const normalized = item.count / maxValue;
-          const barHeight = normalized * (plotHeight - 4);
-          const x = margin.left + slotWidth * index + (slotWidth - barWidth) / 2;
-          const y = margin.top + plotHeight - barHeight;
-          ctx.fillRect(x, y, barWidth, barHeight);
-        });
-
-        // 标签（x轴日期简写：MM-DD）和数值
-        ctx.fillStyle = labelColor;
-        ctx.font = "12px sans-serif";
-        ctx.textAlign = "center";
-
-        data.forEach((item, index) => {
-          const x = margin.left + slotWidth * index + slotWidth / 2;
-          const shortDate = item.date.slice(5);
-          ctx.fillText(shortDate, x, margin.top + plotHeight + 16);
-          ctx.fillText(String(item.count), x, margin.top + plotHeight - 6);
-        });
-      }
-
       function renderCounts() {
         countElement.textContent = String(count);
         todayCountElement.textContent = String(dailyStats.todayCount);
@@ -358,7 +235,6 @@
         }
 
         renderCounts();
-        drawRecentHistoryChart();
         persistCount();
         persistDailyStats();
       }
@@ -367,7 +243,6 @@
         document.body.classList.toggle("theme-dark", theme === "dark");
         themeToggleButton.textContent =
           theme === "dark" ? "☀️ 暗黑模式：开" : "🌙 暗黑模式：关";
-        drawRecentHistoryChart();
       }
 
       function persistTheme() {
@@ -407,10 +282,6 @@
 
         renderCounts();
         renderTheme();
-      });
-
-      window.addEventListener("resize", () => {
-        drawRecentHistoryChart();
       });
 
       normalizeDailyStatsForToday();
