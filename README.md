@@ -74,4 +74,6 @@ python3 -m http.server 8000
 - 2026-03-03: add interactive 7-day chart tooltip + bar selection highlight with theme-aware styling and edge-safe positioning
 - 2026-03-03: fix chart click hit-testing via DPR-aware canvas coords and unify tooltip/selected date format to YYYY-MM-DD
 
+- 2026-03-04: add chart week navigation (上一周/下一周) with persisted anchorDate window in localStorage
+
 <!-- CODEX_CHANGELOG_END -->

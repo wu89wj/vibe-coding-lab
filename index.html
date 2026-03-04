@@ -18,7 +18,11 @@
       </div>
 
       <section class="chart-panel" id="chart-panel">
-        <p>最近 7 天点击趋势（含今天）<span id="selected-bar-info" class="selected-info"></span></p>
+        <p>最近 7 天点击趋势（锚点窗口）<span id="selected-bar-info" class="selected-info"></span></p>
+        <div>
+          <button id="prev-week-btn" class="secondary-btn" type="button">上一周</button>
+          <button id="next-week-btn" class="secondary-btn" type="button">下一周</button>
+        </div>
         <canvas id="history-chart" width="560" height="220" aria-label="最近7天点击图表"></canvas>
         <div id="chart-tooltip" class="chart-tooltip" hidden></div>
       </section>

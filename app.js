@@ -4,8 +4,14 @@ const COUNT_STORAGE_KEY = "vibe-coding-lab-click-count";
 const THEME_STORAGE_KEY = "vibe-coding-lab-theme";
 const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
 const BEST_STREAK_STORAGE_KEY = "vibe-coding-lab-best-streak";
+const CHART_ANCHOR_DATE_STORAGE_KEY = "vibe-coding-lab-chart-anchor-date";
 
-const PROJECT_STORAGE_KEYS = [COUNT_STORAGE_KEY, THEME_STORAGE_KEY, DAILY_STATS_STORAGE_KEY];
+const PROJECT_STORAGE_KEYS = [
+  COUNT_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  DAILY_STATS_STORAGE_KEY,
+  CHART_ANCHOR_DATE_STORAGE_KEY,
+];
 
 let countElement;
 let todayCountElement;
@@ -24,6 +30,8 @@ let exportButton;
 let importButton;
 let importFileInput;
 let importMessageElement;
+let prevWeekButton;
+let nextWeekButton;
 
 let count = 0;
 let theme = "light";
@@ -33,6 +41,7 @@ let bestStreak = 0;
 let chartBars = [];
 let hoveredBarIndex = null;
 let selectedIsoDate = null;
+let chartAnchorDate = getTodayDateString();
 
 function getDateStringByOffset(offsetDays) {
   const date = new Date();
@@ -46,6 +55,37 @@ function getDateStringByOffset(offsetDays) {
 
 function getTodayDateString() {
   return getDateStringByOffset(0);
+}
+
+
+function isValidIsoDate(dateText) {
+  return typeof dateText === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateText);
+}
+
+function getDateStringByOffsetFromIsoDate(isoDate, offsetDays) {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function loadChartAnchorDate() {
+  const saved = localStorage.getItem(CHART_ANCHOR_DATE_STORAGE_KEY);
+  if (isValidIsoDate(saved)) {
+    return saved;
+  }
+  return getTodayDateString();
+}
+
+function persistChartAnchorDate() {
+  localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, chartAnchorDate);
+}
+
+function shiftChartAnchorDate(dayDelta) {
+  chartAnchorDate = getDateStringByOffsetFromIsoDate(chartAnchorDate, dayDelta);
+  persistChartAnchorDate();
 }
 
 function parseCount(value) {
@@ -121,7 +161,7 @@ function syncDateAndRefresh() {
 function getRecentSevenDaysData() {
   const data = [];
   for (let offset = -6; offset <= 0; offset += 1) {
-    const date = getDateStringByOffset(offset);
+    const date = getDateStringByOffsetFromIsoDate(chartAnchorDate, offset);
     data.push({
       date,
       count: parseCount(String(dailyStats.historyByDate[date] ?? "0")),
@@ -297,6 +337,10 @@ function drawRecentHistoryChart() {
   if (!historyChart) return;
   const ctx = historyChart.getContext("2d");
   const data = getRecentSevenDaysData();
+  if (selectedIsoDate && !data.some((item) => item.date === selectedIsoDate)) {
+    selectedIsoDate = null;
+    updateSelectedBarInfo();
+  }
   chartBars = [];
 
   const styles = getComputedStyle(document.body);
@@ -439,11 +483,13 @@ function clearAllData() {
   localStorage.removeItem(COUNT_STORAGE_KEY);
   localStorage.removeItem(THEME_STORAGE_KEY);
   localStorage.removeItem(DAILY_STATS_STORAGE_KEY);
+  localStorage.removeItem(CHART_ANCHOR_DATE_STORAGE_KEY);
 
   count = 0;
   theme = "light";
   dailyStats = getDefaultDailyStats();
   bestStreak = 0;
+  chartAnchorDate = getTodayDateString();
   selectedIsoDate = null;
   updateSelectedBarInfo();
 
@@ -461,6 +507,7 @@ function exportProjectData() {
         [THEME_STORAGE_KEY]: localStorage.getItem(THEME_STORAGE_KEY) ?? "light",
         [DAILY_STATS_STORAGE_KEY]:
           localStorage.getItem(DAILY_STATS_STORAGE_KEY) ?? JSON.stringify(getDefaultDailyStats()),
+        [CHART_ANCHOR_DATE_STORAGE_KEY]: localStorage.getItem(CHART_ANCHOR_DATE_STORAGE_KEY) ?? getTodayDateString(),
       },
     };
 
@@ -507,6 +554,10 @@ function validateBackupObject(backupObject) {
 
   if (typeof data[DAILY_STATS_STORAGE_KEY] !== "string") {
     return `${DAILY_STATS_STORAGE_KEY} 类型错误，应为 JSON 字符串。`;
+  }
+
+  if (typeof data[CHART_ANCHOR_DATE_STORAGE_KEY] !== "string" || !isValidIsoDate(data[CHART_ANCHOR_DATE_STORAGE_KEY])) {
+    return `${CHART_ANCHOR_DATE_STORAGE_KEY} 类型错误，应为 YYYY-MM-DD。`;
   }
 
   let parsedDailyStats;
@@ -565,10 +616,12 @@ function applyImportedBackup(backupObject) {
   localStorage.setItem(COUNT_STORAGE_KEY, data[COUNT_STORAGE_KEY]);
   localStorage.setItem(THEME_STORAGE_KEY, data[THEME_STORAGE_KEY]);
   localStorage.setItem(DAILY_STATS_STORAGE_KEY, data[DAILY_STATS_STORAGE_KEY]);
+  localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, data[CHART_ANCHOR_DATE_STORAGE_KEY]);
 
   count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
   theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   dailyStats = loadDailyStats();
+  chartAnchorDate = loadChartAnchorDate();
   bestStreak = calculateBestStreakFromHistory();
   persistBestStreak();
 
@@ -618,8 +671,10 @@ function bindUI() {
     exportButton: !exportButton,
     importButton: !importButton,
     importFileInput: !importFileInput,
+    prevWeekButton: !prevWeekButton,
+    nextWeekButton: !nextWeekButton,
   };
-  if (missing.exportButton || missing.importButton || missing.importFileInput) {
+  if (missing.exportButton || missing.importButton || missing.importFileInput || missing.prevWeekButton || missing.nextWeekButton) {
     console.error("[bind] missing element", missing);
     return;
   }
@@ -661,6 +716,20 @@ function bindUI() {
 
   importFileInput.addEventListener("change", handleImportFileSelection);
 
+  prevWeekButton.addEventListener("click", () => {
+    shiftChartAnchorDate(-7);
+    hoveredBarIndex = null;
+    hideTooltip();
+    drawRecentHistoryChart();
+  });
+
+  nextWeekButton.addEventListener("click", () => {
+    shiftChartAnchorDate(7);
+    hoveredBarIndex = null;
+    hideTooltip();
+    drawRecentHistoryChart();
+  });
+
   historyChart.addEventListener("mousemove", handleChartMouseMove);
   historyChart.addEventListener("mouseleave", handleChartMouseLeave);
   historyChart.addEventListener("click", handleChartClick);
@@ -692,6 +761,8 @@ function initApp() {
   importButton = document.getElementById("import-btn");
   importFileInput = document.getElementById("import-file-input");
   importMessageElement = document.getElementById("import-message");
+  prevWeekButton = document.getElementById("prev-week-btn");
+  nextWeekButton = document.getElementById("next-week-btn");
 
   const requiredElements = [
     countElement,
@@ -711,6 +782,8 @@ function initApp() {
     importButton,
     importFileInput,
     importMessageElement,
+    prevWeekButton,
+    nextWeekButton,
   ];
 
   if (requiredElements.some((el) => !el)) {
@@ -722,6 +795,7 @@ function initApp() {
   count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
   theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   dailyStats = loadDailyStats();
+  chartAnchorDate = loadChartAnchorDate();
   bestStreak = parseCount(localStorage.getItem(BEST_STREAK_STORAGE_KEY));
   bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
   persistBestStreak();
