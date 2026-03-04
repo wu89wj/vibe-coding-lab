@@ -2,6 +2,8 @@
 
 > README 维护规则：以后任何功能迭代，如果需要改 README，只允许向 `## Changelog` 追加，不要改稳定区文字（除非是 bugfix/纠错）。
 
+> 贡献规则补充：以后功能迭代默认只改 `app.js`；如需改 README，只能在 `<!-- CODEX_CHANGELOG_START -->` 与 `<!-- CODEX_CHANGELOG_END -->` 之间追加一条 changelog；除文档纠错外，禁止改 README 其他区域。
+
 ## 稳定区（Stable Section）
 
 ### 项目简介
@@ -59,6 +61,8 @@ python3 -m http.server 8000
 
 ## Changelog
 
+<!-- CODEX_CHANGELOG_START -->
+
 - 2026-03-03: add daily stats + max daily + clear-all + theme persistence
 - 2026-03-03: add 7-day canvas chart (missing dates fallback to 0)
 - 2026-03-03: split frontend into `index.html` + `app.js` + `style.css` to reduce merge conflicts
@@ -69,3 +73,5 @@ python3 -m http.server 8000
 - 2026-03-03: add streak/best-streak based on historyByDate with immediate refresh on click/import/date-change/clear
 - 2026-03-03: add interactive 7-day chart tooltip + bar selection highlight with theme-aware styling and edge-safe positioning
 - 2026-03-03: fix chart click hit-testing via DPR-aware canvas coords and unify tooltip/selected date format to YYYY-MM-DD
+
+<!-- CODEX_CHANGELOG_END -->
