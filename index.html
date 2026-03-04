@@ -17,9 +17,10 @@
         <div>最长连续打卡：<strong id="best-streak-value">0</strong></div>
       </div>
 
-      <section class="chart-panel">
-        <p>最近 7 天点击趋势（含今天）</p>
+      <section class="chart-panel" id="chart-panel">
+        <p>最近 7 天点击趋势（含今天）<span id="selected-bar-info" class="selected-info"></span></p>
         <canvas id="history-chart" width="560" height="220" aria-label="最近7天点击图表"></canvas>
+        <div id="chart-tooltip" class="chart-tooltip" hidden></div>
       </section>
 
       <div class="actions">

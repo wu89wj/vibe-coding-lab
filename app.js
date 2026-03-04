@@ -13,6 +13,9 @@ let maxDailyCountElement;
 let streakElement;
 let bestStreakElement;
 let historyChart;
+let chartPanel;
+let selectedBarInfoElement;
+let chartTooltipElement;
 let incrementButton;
 let resetButton;
 let themeToggleButton;
@@ -26,6 +29,10 @@ let count = 0;
 let theme = "light";
 let dailyStats;
 let bestStreak = 0;
+
+let chartBars = [];
+let hoveredBarIndex = null;
+let selectedBarDate = null;
 
 function getDateStringByOffset(offsetDays) {
   const date = new Date();
@@ -171,10 +178,122 @@ function persistBestStreak() {
   localStorage.setItem(BEST_STREAK_STORAGE_KEY, String(bestStreak));
 }
 
+function formatDateForTooltip(isoDate) {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}-${month}-${year}`;
+}
+
+function updateSelectedBarInfo() {
+  if (!selectedBarInfoElement) return;
+  if (!selectedBarDate) {
+    selectedBarInfoElement.textContent = "";
+    return;
+  }
+
+  const selectedCount = parseCount(String(dailyStats.historyByDate[selectedBarDate] ?? "0"));
+  selectedBarInfoElement.textContent = `已选：${selectedBarDate}（${selectedCount} 次）`;
+}
+
+function hideTooltip() {
+  if (!chartTooltipElement) return;
+  chartTooltipElement.hidden = true;
+}
+
+function updateTooltipPosition(mouseX, mouseY) {
+  if (!chartTooltipElement || !chartPanel) return;
+
+  const panelRect = chartPanel.getBoundingClientRect();
+  const tooltipRect = chartTooltipElement.getBoundingClientRect();
+
+  let left = mouseX - panelRect.left + 12;
+  let top = mouseY - panelRect.top + 12;
+
+  const maxLeft = panelRect.width - tooltipRect.width - 6;
+  const maxTop = panelRect.height - tooltipRect.height - 6;
+
+  left = Math.max(6, Math.min(left, maxLeft));
+  top = Math.max(6, Math.min(top, maxTop));
+
+  chartTooltipElement.style.left = `${left}px`;
+  chartTooltipElement.style.top = `${top}px`;
+}
+
+function showTooltipForIndex(index, mouseX, mouseY) {
+  if (!chartTooltipElement) return;
+  const item = chartBars[index];
+  if (!item) return;
+
+  chartTooltipElement.innerHTML = `${formatDateForTooltip(item.date)}<br />点击次数：${item.count}`;
+  chartTooltipElement.hidden = false;
+  updateTooltipPosition(mouseX, mouseY);
+}
+
+function getHoveredBarIndexFromPoint(canvasX, canvasY) {
+  for (let i = 0; i < chartBars.length; i += 1) {
+    const bar = chartBars[i];
+    if (canvasX >= bar.x && canvasX <= bar.x + bar.width && canvasY >= bar.y && canvasY <= bar.y + bar.height) {
+      return i;
+    }
+  }
+  return null;
+}
+
+function handleChartMouseMove(event) {
+  if (!historyChart) return;
+  const rect = historyChart.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const hoveredIndex = getHoveredBarIndexFromPoint(x, y);
+
+  if (hoveredIndex === null) {
+    if (hoveredBarIndex !== null) {
+      hoveredBarIndex = null;
+      hideTooltip();
+      drawRecentHistoryChart();
+    }
+    return;
+  }
+
+  showTooltipForIndex(hoveredIndex, event.clientX, event.clientY);
+
+  if (hoveredBarIndex !== hoveredIndex) {
+    hoveredBarIndex = hoveredIndex;
+    drawRecentHistoryChart();
+  }
+}
+
+function handleChartMouseLeave() {
+  if (hoveredBarIndex !== null) {
+    hoveredBarIndex = null;
+    hideTooltip();
+    drawRecentHistoryChart();
+  }
+}
+
+function handleChartClick(event) {
+  if (!historyChart) return;
+  const rect = historyChart.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const index = getHoveredBarIndexFromPoint(x, y);
+
+  if (index === null) {
+    selectedBarDate = null;
+    updateSelectedBarInfo();
+    drawRecentHistoryChart();
+    return;
+  }
+
+  selectedBarDate = chartBars[index].date;
+  updateSelectedBarInfo();
+  drawRecentHistoryChart();
+}
+
 function drawRecentHistoryChart() {
   if (!historyChart) return;
   const ctx = historyChart.getContext("2d");
   const data = getRecentSevenDaysData();
+  chartBars = [];
 
   const styles = getComputedStyle(document.body);
   const gridColor = styles.getPropertyValue("--chart-grid-color").trim();
@@ -220,10 +339,31 @@ function drawRecentHistoryChart() {
 
   data.forEach((item, index) => {
     const normalized = item.count / maxValue;
-    const barHeight = normalized * (plotHeight - 4);
+    const barHeight = Math.max(normalized * (plotHeight - 4), 2);
     const x = margin.left + slotWidth * index + (slotWidth - barWidth) / 2;
     const y = margin.top + plotHeight - barHeight;
+
+    const isHovered = hoveredBarIndex === index;
+    const isSelected = selectedBarDate === item.date;
+
+    ctx.fillStyle = isSelected ? axisColor : barColor;
     ctx.fillRect(x, y, barWidth, barHeight);
+
+    if (isHovered || isSelected) {
+      ctx.strokeStyle = labelColor;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, barWidth, barHeight);
+    }
+
+    chartBars.push({
+      index,
+      date: item.date,
+      count: item.count,
+      x,
+      y,
+      width: barWidth,
+      height: barHeight,
+    });
   });
 
   ctx.fillStyle = labelColor;
@@ -297,6 +437,8 @@ function clearAllData() {
   theme = "light";
   dailyStats = getDefaultDailyStats();
   bestStreak = 0;
+  selectedBarDate = null;
+  updateSelectedBarInfo();
 
   renderCounts();
   renderTheme();
@@ -423,6 +565,11 @@ function applyImportedBackup(backupObject) {
   bestStreak = calculateBestStreakFromHistory();
   persistBestStreak();
 
+  if (selectedBarDate && parseCount(String(dailyStats.historyByDate[selectedBarDate] ?? "0")) <= 0) {
+    selectedBarDate = null;
+  }
+  updateSelectedBarInfo();
+
   syncDateAndRefresh();
   renderCounts();
   renderTheme();
@@ -507,6 +654,10 @@ function bindUI() {
 
   importFileInput.addEventListener("change", handleImportFileSelection);
 
+  historyChart.addEventListener("mousemove", handleChartMouseMove);
+  historyChart.addEventListener("mouseleave", handleChartMouseLeave);
+  historyChart.addEventListener("click", handleChartClick);
+
   window.addEventListener("resize", drawRecentHistoryChart);
   window.addEventListener("focus", syncDateAndRefresh);
   document.addEventListener("visibilitychange", () => {
@@ -523,6 +674,9 @@ function initApp() {
   streakElement = document.getElementById("streak-value");
   bestStreakElement = document.getElementById("best-streak-value");
   historyChart = document.getElementById("history-chart");
+  chartPanel = document.getElementById("chart-panel");
+  selectedBarInfoElement = document.getElementById("selected-bar-info");
+  chartTooltipElement = document.getElementById("chart-tooltip");
   incrementButton = document.getElementById("increment-btn");
   resetButton = document.getElementById("reset-btn");
   themeToggleButton = document.getElementById("theme-toggle-btn");
@@ -539,6 +693,9 @@ function initApp() {
     streakElement,
     bestStreakElement,
     historyChart,
+    chartPanel,
+    selectedBarInfoElement,
+    chartTooltipElement,
     incrementButton,
     resetButton,
     themeToggleButton,
@@ -561,6 +718,7 @@ function initApp() {
   bestStreak = parseCount(localStorage.getItem(BEST_STREAK_STORAGE_KEY));
   bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
   persistBestStreak();
+  updateSelectedBarInfo();
 
   bindUI();
   syncDateAndRefresh();
