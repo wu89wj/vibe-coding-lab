@@ -1,83 +1,134 @@
 # vibe-coding-lab
 
-> README 维护规则：以后任何功能迭代，如果需要改 README，只允许向 `## Changelog` 追加，不要改稳定区文字（除非是 bugfix/纠错）。
-
-> 贡献规则补充：以后功能迭代默认只改 `app.js`；如需改 README，只能在 `<!-- CODEX_CHANGELOG_START -->` 与 `<!-- CODEX_CHANGELOG_END -->` 之间追加一条 changelog；除文档纠错外，禁止改 README 其他区域。
-
-## 稳定区（Stable Section）
-
-### 项目简介
-
 一个面向新手的最小前端练习仓库，用来体验从「提需求 → 改代码 → 验证 → 提交」的完整 Vibe Coding 流程。
 
-### 功能列表
+当前示例页面包含：
+- `Hello Vibe Coding` 标题展示
+- 点击计数（支持 `localStorage` 持久化）
+- 一键重置计数
+- 亮色 / 暗黑模式切换（支持主题记忆）
 
-- 总点击次数
-- 今日点击次数（按本地日期，跨天自动归零）
-- 历史最高点击次数（单日）
-- 重置总点击数（不清历史）
-- 清空所有数据（`confirm` 二次确认）
-- 暗黑模式切换（主题持久化）
-- 最近 7 天趋势图（`canvas`，缺失日期按 0）
+## 快速开始（3分钟）
 
-### 快速开始
+### 1) 克隆仓库
 
 ```bash
 git clone https://github.com/wu89wj/vibe-coding-lab.git
 cd vibe-coding-lab
 ```
 
-### 运行方式
+### 2) 运行示例页面
+
+你有两种方式：
+
+- **直接打开**：用浏览器打开 `index.html`
+- **本地服务（推荐）**：
 
 ```bash
 python3 -m http.server 8000
 ```
 
-打开：`http://localhost:8000/index.html`
+然后访问：
 
-### localStorage keys
+```text
+http://localhost:8000/index.html
+```
 
-- `vibe-coding-lab-click-count`：总点击次数
-- `vibe-coding-lab-theme`：主题（`light` / `dark`）
-- `vibe-coding-lab-daily-stats`：每日统计对象（含 `currentDate`、`todayCount`、`historyMaxDailyCount`、`historyByDate`）
+### 3) 验证是否成功
 
-### 验收步骤
-
-1. 点击“点我 +1”，总点击与今日点击递增。
-2. 点击“重置总点击数”，仅总点击归零，历史统计不变。
-3. 切换暗黑模式并刷新页面，主题保持一致。
-4. 页面中确认存在 `<canvas id="history-chart">`，位于统计区下方且默认可见。
-5. 清空或缺失 `historyByDate` 后刷新，图表仍显示（最近 7 天均为 0）。
-6. 点击“清空所有数据”出现确认框；确认后所有统计与主题重置。
-7. 改系统日期验收：将系统日期从 `2026-03-03` 改到 `2026-03-04` 后回到页面（或刷新），`todayCount` 应归零，但 `historyByDate` 不应预先写入 `2026-03-04: 0`。
-8. 在新日期点击“点我 +1”，应同时更新 `todayCount` 和 `historyByDate[今天]`，图表也应立即刷新显示新日期的点击值。
-
-### GitHub Pages 发布
-
-保持 Pages 设置为：`main` 分支 + `/(root)` 目录（Deploy from a branch）。
-仓库根目录保留 `.nojekyll`，确保静态资源直接发布。
+- 页面显示 `Hello Vibe Coding`
+- 点击“点我 +1”后计数增长
+- 点击“重置计数”后计数归零
+- 切换“暗黑模式”后页面主题变化
+- 刷新页面后计数与主题都能保持
 
 ---
 
-## Changelog
+## 功能验收清单
 
-<!-- CODEX_CHANGELOG_START -->
+按下面步骤快速确认功能都正常：
 
-- 2026-03-03: add daily stats + max daily + clear-all + theme persistence
-- 2026-03-03: add 7-day canvas chart (missing dates fallback to 0)
-- 2026-03-03: split frontend into `index.html` + `app.js` + `style.css` to reduce merge conflicts
-- 2026-03-03: fix cross-day date switch sync (do not prefill `historyByDate[today]=0`, refresh stats/chart on focus)
-- 2026-03-03: add JSON backup import/export (export download + validated import + overwrite confirm + instant UI/chart refresh)
-- 2026-03-03: fix export/import buttons binding + add click debug logs and alert/console error handling
-- 2026-03-03: add explicit [app]/[export]/[import] console logs and DOMContentLoaded bindUI for export/import reliability
-- 2026-03-03: add streak/best-streak based on historyByDate with immediate refresh on click/import/date-change/clear
-- 2026-03-03: add interactive 7-day chart tooltip + bar selection highlight with theme-aware styling and edge-safe positioning
-- 2026-03-03: fix chart click hit-testing via DPR-aware canvas coords and unify tooltip/selected date format to YYYY-MM-DD
+1. **计数功能**
+   - 打开 `index.html` 后，点击“点我 +1”按钮，数字应该递增。
+2. **重置功能**
+   - 点击“重置计数”按钮后，数字应立即变为 `0`。
+3. **计数持久化（localStorage）**
+   - 先点击几次“点我 +1”，再刷新页面，数字应保持刷新前的值。
+4. **暗黑模式切换**
+   - 点击“暗黑模式”按钮，页面主题应在亮色/暗色间切换。
+5. **主题持久化（localStorage）**
+   - 切到暗黑模式后刷新页面，应保持暗黑模式；切回亮色后刷新，也应保持亮色。
 
-- 2026-03-04: add chart week navigation (上一周/下一周) with persisted anchorDate window in localStorage
+---
 
-- 2026-03-04: fix import to support merge/overwrite modes, preserve historyByDate on merge, and auto-jump chart anchor after import
 
-- 2026-03-04: fix post-import rehydrate to sync in-memory state/UI/chart and continue +1 from imported counts
+## GitHub Pages 发布设置（无构建）
 
-<!-- CODEX_CHANGELOG_END -->
+本仓库是纯静态页面，不需要 GitHub Actions 构建流程。
+
+请在仓库 **Settings → Pages** 中确认：
+- **Source**: `Deploy from a branch`
+- **Branch**: `main`
+- **Folder**: `/(root)`
+
+另外仓库已添加 `.nojekyll`，用于禁用 Jekyll 处理，避免不必要的 Pages 构建步骤。
+
+### 线上验证
+
+1. 推送 `main` 最新代码后，等待 1~3 分钟。
+2. 访问：`https://wu89wj.github.io/vibe-coding-lab/`
+3. 页面应能看到：
+   - `Hello Vibe Coding`
+   - `重置计数` 按钮
+   - `暗黑模式` 开关按钮（🌙/☀️）
+
+---
+
+## 用 Codex 的推荐工作流
+
+### Step 1：把需求写清楚
+建议用这个结构提任务：
+
+- **目标**：你想实现什么
+- **验收标准**：如何算完成
+- **限制条件**：是否能引入依赖、文件数量限制等
+- **输出要求**：要不要测试命令、提交信息、PR 描述
+
+示例：
+
+```text
+请在 index.html 增加“重置按钮”：
+- 点击后计数清零
+- localStorage 同步清零
+- 保持页面风格一致
+- 最后给我验证步骤
+```
+
+### Step 2：让 Codex 执行并查看结果
+- 查看改动文件
+- 看是否包含验证命令
+- 确认是否满足你的验收标准
+
+### Step 3：本地手动验证
+至少做这几件事：
+- 页面能打开
+- 新功能能操作
+- 刷新后状态符合预期
+- 控制台无报错
+
+### Step 4：提交与迭代
+- 让 Codex 生成清晰 commit
+- 如需协作，创建 PR 并补充变更说明
+- 再提下一轮小任务（一次一个小目标最好）
+
+---
+
+## 新手入口文档
+
+请先阅读：[`ONBOARDING.md`](./ONBOARDING.md)
+
+里面包含：
+- 仓库是什么
+- 如何运行
+- 如何在 Codex 提任务
+- 如何验证改动
