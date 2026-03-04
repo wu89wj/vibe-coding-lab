@@ -32,7 +32,7 @@ let bestStreak = 0;
 
 let chartBars = [];
 let hoveredBarIndex = null;
-let selectedBarDate = null;
+let selectedIsoDate = null;
 
 function getDateStringByOffset(offsetDays) {
   const date = new Date();
@@ -178,20 +178,15 @@ function persistBestStreak() {
   localStorage.setItem(BEST_STREAK_STORAGE_KEY, String(bestStreak));
 }
 
-function formatDateForTooltip(isoDate) {
-  const [year, month, day] = isoDate.split("-");
-  return `${day}-${month}-${year}`;
-}
-
 function updateSelectedBarInfo() {
   if (!selectedBarInfoElement) return;
-  if (!selectedBarDate) {
+  if (!selectedIsoDate) {
     selectedBarInfoElement.textContent = "";
     return;
   }
 
-  const selectedCount = parseCount(String(dailyStats.historyByDate[selectedBarDate] ?? "0"));
-  selectedBarInfoElement.textContent = `已选：${selectedBarDate}（${selectedCount} 次）`;
+  const selectedCount = parseCount(String(dailyStats.historyByDate[selectedIsoDate] ?? "0"));
+  selectedBarInfoElement.textContent = `已选：${selectedIsoDate}（${selectedCount} 次）`;
 }
 
 function hideTooltip() {
@@ -223,7 +218,7 @@ function showTooltipForIndex(index, mouseX, mouseY) {
   const item = chartBars[index];
   if (!item) return;
 
-  chartTooltipElement.innerHTML = `${formatDateForTooltip(item.date)}<br />点击次数：${item.count}`;
+  chartTooltipElement.innerHTML = `${item.isoDate}<br />点击次数：${item.value}`;
   chartTooltipElement.hidden = false;
   updateTooltipPosition(mouseX, mouseY);
 }
@@ -241,8 +236,10 @@ function getHoveredBarIndexFromPoint(canvasX, canvasY) {
 function handleChartMouseMove(event) {
   if (!historyChart) return;
   const rect = historyChart.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const scaleX = historyChart.width / rect.width;
+  const scaleY = historyChart.height / rect.height;
+  const x = (event.clientX - rect.left) * scaleX;
+  const y = (event.clientY - rect.top) * scaleY;
   const hoveredIndex = getHoveredBarIndexFromPoint(x, y);
 
   if (hoveredIndex === null) {
@@ -272,19 +269,26 @@ function handleChartMouseLeave() {
 
 function handleChartClick(event) {
   if (!historyChart) return;
+  console.log("[chart] click");
+
   const rect = historyChart.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const scaleX = historyChart.width / rect.width;
+  const scaleY = historyChart.height / rect.height;
+  const x = (event.clientX - rect.left) * scaleX;
+  const y = (event.clientY - rect.top) * scaleY;
   const index = getHoveredBarIndexFromPoint(x, y);
 
   if (index === null) {
-    selectedBarDate = null;
+    selectedIsoDate = null;
     updateSelectedBarInfo();
     drawRecentHistoryChart();
     return;
   }
 
-  selectedBarDate = chartBars[index].date;
+  const hitBar = chartBars[index];
+  console.log("[chart] hit", hitBar.isoDate, hitBar.value);
+
+  selectedIsoDate = selectedIsoDate === hitBar.isoDate ? null : hitBar.isoDate;
   updateSelectedBarInfo();
   drawRecentHistoryChart();
 }
@@ -344,7 +348,7 @@ function drawRecentHistoryChart() {
     const y = margin.top + plotHeight - barHeight;
 
     const isHovered = hoveredBarIndex === index;
-    const isSelected = selectedBarDate === item.date;
+    const isSelected = selectedIsoDate === item.date;
 
     ctx.fillStyle = isSelected ? axisColor : barColor;
     ctx.fillRect(x, y, barWidth, barHeight);
@@ -355,14 +359,17 @@ function drawRecentHistoryChart() {
       ctx.strokeRect(x, y, barWidth, barHeight);
     }
 
+    const scaleX = historyChart.width / cssWidth;
+    const scaleY = historyChart.height / cssHeight;
+
     chartBars.push({
       index,
-      date: item.date,
-      count: item.count,
-      x,
-      y,
-      width: barWidth,
-      height: barHeight,
+      isoDate: item.date,
+      value: item.count,
+      x: x * scaleX,
+      y: y * scaleY,
+      width: barWidth * scaleX,
+      height: barHeight * scaleY,
     });
   });
 
@@ -437,7 +444,7 @@ function clearAllData() {
   theme = "light";
   dailyStats = getDefaultDailyStats();
   bestStreak = 0;
-  selectedBarDate = null;
+  selectedIsoDate = null;
   updateSelectedBarInfo();
 
   renderCounts();
@@ -565,8 +572,8 @@ function applyImportedBackup(backupObject) {
   bestStreak = calculateBestStreakFromHistory();
   persistBestStreak();
 
-  if (selectedBarDate && parseCount(String(dailyStats.historyByDate[selectedBarDate] ?? "0")) <= 0) {
-    selectedBarDate = null;
+  if (selectedIsoDate && parseCount(String(dailyStats.historyByDate[selectedIsoDate] ?? "0")) <= 0) {
+    selectedIsoDate = null;
   }
   updateSelectedBarInfo();
 

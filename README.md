@@ -68,3 +68,4 @@ python3 -m http.server 8000
 - 2026-03-03: add explicit [app]/[export]/[import] console logs and DOMContentLoaded bindUI for export/import reliability
 - 2026-03-03: add streak/best-streak based on historyByDate with immediate refresh on click/import/date-change/clear
 - 2026-03-03: add interactive 7-day chart tooltip + bar selection highlight with theme-aware styling and edge-safe positioning
+- 2026-03-03: fix chart click hit-testing via DPR-aware canvas coords and unify tooltip/selected date format to YYYY-MM-DD
