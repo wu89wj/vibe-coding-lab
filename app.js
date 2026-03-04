@@ -329,7 +329,10 @@ function handleChartClick(event) {
 
   if (index === null) {
     selectedIsoDate = null;
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
     persistSelectedIsoDate();
+=======
+>>>>>>> main
     updateSelectedBarInfo();
     drawRecentHistoryChart();
     return;
@@ -339,7 +342,10 @@ function handleChartClick(event) {
   console.log("[chart] hit", hitBar.isoDate, hitBar.value);
 
   selectedIsoDate = selectedIsoDate === hitBar.isoDate ? null : hitBar.isoDate;
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
   persistSelectedIsoDate();
+=======
+>>>>>>> main
   updateSelectedBarInfo();
   drawRecentHistoryChart();
 }
@@ -350,7 +356,10 @@ function drawRecentHistoryChart() {
   const data = getRecentSevenDaysData();
   if (selectedIsoDate && !data.some((item) => item.date === selectedIsoDate)) {
     selectedIsoDate = null;
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
     persistSelectedIsoDate();
+=======
+>>>>>>> main
     updateSelectedBarInfo();
   }
   chartBars = [];
@@ -441,6 +450,7 @@ function drawRecentHistoryChart() {
   });
 }
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
 function rehydrateFromStorage(options = {}) {
   const { render = false, reason = "" } = options;
 
@@ -476,6 +486,8 @@ function rehydrateFromStorage(options = {}) {
   }
 }
 
+=======
+>>>>>>> main
 function renderCounts() {
   if (!countElement) return;
   countElement.textContent = String(count);
@@ -509,6 +521,7 @@ function renderTheme() {
 }
 
 function incrementCounters() {
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
   rehydrateFromStorage({ render: false });
   normalizeDailyStatsForToday();
 
@@ -518,6 +531,10 @@ function incrementCounters() {
     currentDate: dailyStats.currentDate,
   };
 
+=======
+  normalizeDailyStatsForToday();
+
+>>>>>>> main
   count += 1;
   dailyStats.todayCount += 1;
   const today = dailyStats.currentDate;
@@ -527,6 +544,7 @@ function incrementCounters() {
     dailyStats.historyMaxDailyCount = dailyStats.todayCount;
   }
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
   persistCount();
   persistDailyStats();
   renderCounts();
@@ -540,6 +558,12 @@ function incrementCounters() {
       currentDate: dailyStats.currentDate,
     },
   });
+=======
+  renderCounts();
+  drawRecentHistoryChart();
+  persistCount();
+  persistDailyStats();
+>>>>>>> main
 }
 
 function clearAllData() {
@@ -547,7 +571,10 @@ function clearAllData() {
   localStorage.removeItem(THEME_STORAGE_KEY);
   localStorage.removeItem(DAILY_STATS_STORAGE_KEY);
   localStorage.removeItem(CHART_ANCHOR_DATE_STORAGE_KEY);
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
   localStorage.removeItem(SELECTED_DATE_STORAGE_KEY);
+=======
+>>>>>>> main
 
   count = 0;
   theme = "light";
@@ -765,6 +792,7 @@ function applyImportedBackup(backupObject) {
   localStorage.setItem(DAILY_STATS_STORAGE_KEY, JSON.stringify(importedState.dailyStats));
   localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, importedState.anchorDate);
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
   const importedSelectedDate = backupObject.data[SELECTED_DATE_STORAGE_KEY];
   if (isValidIsoDate(importedSelectedDate)) {
     localStorage.setItem(SELECTED_DATE_STORAGE_KEY, importedSelectedDate);
@@ -773,6 +801,23 @@ function applyImportedBackup(backupObject) {
   }
 
   rehydrateFromStorage({ render: true, reason: "import" });
+=======
+  count = importedState.count;
+  theme = importedState.theme;
+  dailyStats = importedState.dailyStats;
+  chartAnchorDate = importedState.anchorDate;
+  bestStreak = calculateBestStreakFromHistory();
+  persistBestStreak();
+
+  hoveredBarIndex = null;
+  hideTooltip();
+  selectedIsoDate = null;
+  updateSelectedBarInfo();
+
+  syncDateAndRefresh();
+  renderCounts();
+  renderTheme();
+>>>>>>> main
 
   const modeText = mode === "merge" ? "合并导入" : "覆盖导入";
   showImportMessage(`导入成功：已完成${modeText}并刷新页面状态。`, "success");
@@ -934,10 +979,26 @@ function initApp() {
     return;
   }
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
   rehydrateFromStorage({ render: false });
 
   bindUI();
   rehydrateFromStorage({ render: true });
+=======
+  count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
+  theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+  dailyStats = loadDailyStats();
+  chartAnchorDate = loadChartAnchorDate();
+  bestStreak = parseCount(localStorage.getItem(BEST_STREAK_STORAGE_KEY));
+  bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
+  persistBestStreak();
+  updateSelectedBarInfo();
+
+  bindUI();
+  syncDateAndRefresh();
+  renderCounts();
+  renderTheme();
+>>>>>>> main
   showImportMessage("", "info");
 }
 
