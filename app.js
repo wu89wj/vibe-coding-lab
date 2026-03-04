@@ -5,6 +5,7 @@ const THEME_STORAGE_KEY = "vibe-coding-lab-theme";
 const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
 const BEST_STREAK_STORAGE_KEY = "vibe-coding-lab-best-streak";
 const CHART_ANCHOR_DATE_STORAGE_KEY = "vibe-coding-lab-chart-anchor-date";
+const SELECTED_DATE_STORAGE_KEY = "vibe-coding-lab-selected-date";
 
 const PROJECT_STORAGE_KEYS = [
   COUNT_STORAGE_KEY,
@@ -81,6 +82,14 @@ function loadChartAnchorDate() {
 
 function persistChartAnchorDate() {
   localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, chartAnchorDate);
+}
+
+function persistSelectedIsoDate() {
+  if (selectedIsoDate) {
+    localStorage.setItem(SELECTED_DATE_STORAGE_KEY, selectedIsoDate);
+    return;
+  }
+  localStorage.removeItem(SELECTED_DATE_STORAGE_KEY);
 }
 
 function shiftChartAnchorDate(dayDelta) {
@@ -320,6 +329,10 @@ function handleChartClick(event) {
 
   if (index === null) {
     selectedIsoDate = null;
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+    persistSelectedIsoDate();
+=======
+>>>>>>> main
     updateSelectedBarInfo();
     drawRecentHistoryChart();
     return;
@@ -329,6 +342,10 @@ function handleChartClick(event) {
   console.log("[chart] hit", hitBar.isoDate, hitBar.value);
 
   selectedIsoDate = selectedIsoDate === hitBar.isoDate ? null : hitBar.isoDate;
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+  persistSelectedIsoDate();
+=======
+>>>>>>> main
   updateSelectedBarInfo();
   drawRecentHistoryChart();
 }
@@ -339,6 +356,10 @@ function drawRecentHistoryChart() {
   const data = getRecentSevenDaysData();
   if (selectedIsoDate && !data.some((item) => item.date === selectedIsoDate)) {
     selectedIsoDate = null;
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+    persistSelectedIsoDate();
+=======
+>>>>>>> main
     updateSelectedBarInfo();
   }
   chartBars = [];
@@ -429,6 +450,44 @@ function drawRecentHistoryChart() {
   });
 }
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+function rehydrateFromStorage(options = {}) {
+  const { render = false, reason = "" } = options;
+
+  count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
+  theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+  dailyStats = loadDailyStats();
+  chartAnchorDate = loadChartAnchorDate();
+
+  const savedSelected = localStorage.getItem(SELECTED_DATE_STORAGE_KEY);
+  selectedIsoDate = isValidIsoDate(savedSelected) ? savedSelected : null;
+
+  bestStreak = parseCount(localStorage.getItem(BEST_STREAK_STORAGE_KEY));
+  bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
+  persistBestStreak();
+
+  hoveredBarIndex = null;
+  hideTooltip();
+
+  if (render) {
+    updateSelectedBarInfo();
+    syncDateAndRefresh();
+    renderCounts();
+    renderTheme();
+  }
+
+  if (reason === "import") {
+    console.log("[import] rehydrated", {
+      count,
+      todayCount: dailyStats.todayCount,
+      currentDate: dailyStats.currentDate,
+      anchorDate: chartAnchorDate,
+    });
+  }
+}
+
+=======
+>>>>>>> main
 function renderCounts() {
   if (!countElement) return;
   countElement.textContent = String(count);
@@ -462,8 +521,20 @@ function renderTheme() {
 }
 
 function incrementCounters() {
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+  rehydrateFromStorage({ render: false });
   normalizeDailyStatsForToday();
 
+  const beforeState = {
+    count,
+    todayCount: dailyStats.todayCount,
+    currentDate: dailyStats.currentDate,
+  };
+
+=======
+  normalizeDailyStatsForToday();
+
+>>>>>>> main
   count += 1;
   dailyStats.todayCount += 1;
   const today = dailyStats.currentDate;
@@ -473,10 +544,26 @@ function incrementCounters() {
     dailyStats.historyMaxDailyCount = dailyStats.todayCount;
   }
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+  persistCount();
+  persistDailyStats();
+  renderCounts();
+  drawRecentHistoryChart();
+
+  console.log("[inc] before/after", {
+    before: beforeState,
+    after: {
+      count,
+      todayCount: dailyStats.todayCount,
+      currentDate: dailyStats.currentDate,
+    },
+  });
+=======
   renderCounts();
   drawRecentHistoryChart();
   persistCount();
   persistDailyStats();
+>>>>>>> main
 }
 
 function clearAllData() {
@@ -484,6 +571,10 @@ function clearAllData() {
   localStorage.removeItem(THEME_STORAGE_KEY);
   localStorage.removeItem(DAILY_STATS_STORAGE_KEY);
   localStorage.removeItem(CHART_ANCHOR_DATE_STORAGE_KEY);
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+  localStorage.removeItem(SELECTED_DATE_STORAGE_KEY);
+=======
+>>>>>>> main
 
   count = 0;
   theme = "light";
@@ -508,6 +599,7 @@ function exportProjectData() {
         [DAILY_STATS_STORAGE_KEY]:
           localStorage.getItem(DAILY_STATS_STORAGE_KEY) ?? JSON.stringify(getDefaultDailyStats()),
         [CHART_ANCHOR_DATE_STORAGE_KEY]: localStorage.getItem(CHART_ANCHOR_DATE_STORAGE_KEY) ?? getTodayDateString(),
+        [SELECTED_DATE_STORAGE_KEY]: localStorage.getItem(SELECTED_DATE_STORAGE_KEY) ?? "",
       },
     };
 
@@ -700,6 +792,16 @@ function applyImportedBackup(backupObject) {
   localStorage.setItem(DAILY_STATS_STORAGE_KEY, JSON.stringify(importedState.dailyStats));
   localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, importedState.anchorDate);
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+  const importedSelectedDate = backupObject.data[SELECTED_DATE_STORAGE_KEY];
+  if (isValidIsoDate(importedSelectedDate)) {
+    localStorage.setItem(SELECTED_DATE_STORAGE_KEY, importedSelectedDate);
+  } else {
+    localStorage.removeItem(SELECTED_DATE_STORAGE_KEY);
+  }
+
+  rehydrateFromStorage({ render: true, reason: "import" });
+=======
   count = importedState.count;
   theme = importedState.theme;
   dailyStats = importedState.dailyStats;
@@ -715,6 +817,7 @@ function applyImportedBackup(backupObject) {
   syncDateAndRefresh();
   renderCounts();
   renderTheme();
+>>>>>>> main
 
   const modeText = mode === "merge" ? "合并导入" : "覆盖导入";
   showImportMessage(`导入成功：已完成${modeText}并刷新页面状态。`, "success");
@@ -876,6 +979,12 @@ function initApp() {
     return;
   }
 
+<<<<<<< codex/add-onboarding-package-and-examples-x8sgw9
+  rehydrateFromStorage({ render: false });
+
+  bindUI();
+  rehydrateFromStorage({ render: true });
+=======
   count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
   theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   dailyStats = loadDailyStats();
@@ -889,6 +998,7 @@ function initApp() {
   syncDateAndRefresh();
   renderCounts();
   renderTheme();
+>>>>>>> main
   showImportMessage("", "info");
 }
 

@@ -78,4 +78,6 @@ python3 -m http.server 8000
 
 - 2026-03-04: fix import to support merge/overwrite modes, preserve historyByDate on merge, and auto-jump chart anchor after import
 
+- 2026-03-04: fix post-import rehydrate to sync in-memory state/UI/chart and continue +1 from imported counts
+
 <!-- CODEX_CHANGELOG_END -->
