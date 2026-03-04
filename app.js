@@ -597,6 +597,86 @@ function validateBackupObject(backupObject) {
   return null;
 }
 
+function normalizeDailyStatsFromObject(rawStats) {
+  const fallback = getDefaultDailyStats();
+  const currentDate = isValidIsoDate(rawStats?.currentDate) ? rawStats.currentDate : fallback.currentDate;
+  return {
+    currentDate,
+    todayCount: parseCount(String(rawStats?.todayCount ?? "0")),
+    historyMaxDailyCount: parseCount(String(rawStats?.historyMaxDailyCount ?? "0")),
+    historyByDate: normalizeHistoryByDate(rawStats?.historyByDate),
+  };
+}
+
+function getMaxHistoryDate(historyByDate) {
+  const validDates = Object.keys(historyByDate || {}).filter((date) => isValidIsoDate(date));
+  if (validDates.length === 0) {
+    return null;
+  }
+  return validDates.sort().at(-1) ?? null;
+}
+
+function recalculateDerivedDailyStats(stats) {
+  const values = Object.values(stats.historyByDate).map((value) => parseCount(String(value)));
+  stats.historyMaxDailyCount = values.length > 0 ? Math.max(...values) : 0;
+  stats.todayCount = parseCount(String(stats.historyByDate[stats.currentDate] ?? "0"));
+  return stats;
+}
+
+function getImportMode() {
+  const shouldContinue = confirm("将导入数据并更新当前页面，是否继续？");
+  if (!shouldContinue) {
+    return null;
+  }
+
+  const useMergeMode = confirm(
+    "导入模式选择：点击“确定”使用【合并导入（推荐）】；点击“取消”使用【覆盖导入】。"
+  );
+  return useMergeMode ? "merge" : "overwrite";
+}
+
+function buildImportedState(data, mode) {
+  const importedCount = parseCount(data[COUNT_STORAGE_KEY]);
+  const importedTheme = data[THEME_STORAGE_KEY] === "dark" ? "dark" : "light";
+  const importedDailyStats = normalizeDailyStatsFromObject(JSON.parse(data[DAILY_STATS_STORAGE_KEY]));
+
+  if (mode === "overwrite") {
+    const overwriteDailyStats = recalculateDerivedDailyStats(importedDailyStats);
+    const anchorDate =
+      importedDailyStats.currentDate || getMaxHistoryDate(importedDailyStats.historyByDate) || getTodayDateString();
+
+    return {
+      count: importedCount,
+      theme: importedTheme,
+      dailyStats: overwriteDailyStats,
+      anchorDate,
+    };
+  }
+
+  const existingDailyStats = loadDailyStats();
+  const mergedHistoryByDate = { ...existingDailyStats.historyByDate };
+  Object.entries(importedDailyStats.historyByDate).forEach(([isoDate, importedValue]) => {
+    const existingValue = parseCount(String(mergedHistoryByDate[isoDate] ?? "0"));
+    mergedHistoryByDate[isoDate] = Math.max(existingValue, parseCount(String(importedValue)));
+  });
+
+  const mergedDailyStats = recalculateDerivedDailyStats({
+    currentDate: importedDailyStats.currentDate,
+    todayCount: 0,
+    historyMaxDailyCount: 0,
+    historyByDate: mergedHistoryByDate,
+  });
+
+  const mergedAnchorDate = importedDailyStats.currentDate || getMaxHistoryDate(importedDailyStats.historyByDate) || getTodayDateString();
+
+  return {
+    count: Math.max(parseCount(localStorage.getItem(COUNT_STORAGE_KEY)), importedCount),
+    theme: importedTheme,
+    dailyStats: mergedDailyStats,
+    anchorDate: mergedAnchorDate,
+  };
+}
+
 function applyImportedBackup(backupObject) {
   const validationError = validateBackupObject(backupObject);
   if (validationError) {
@@ -606,35 +686,39 @@ function applyImportedBackup(backupObject) {
     return;
   }
 
-  const shouldOverwrite = confirm("将覆盖当前数据，是否继续");
-  if (!shouldOverwrite) {
+  const mode = getImportMode();
+  if (!mode) {
     showImportMessage("已取消导入。", "info");
     return;
   }
 
   const data = backupObject.data;
-  localStorage.setItem(COUNT_STORAGE_KEY, data[COUNT_STORAGE_KEY]);
-  localStorage.setItem(THEME_STORAGE_KEY, data[THEME_STORAGE_KEY]);
-  localStorage.setItem(DAILY_STATS_STORAGE_KEY, data[DAILY_STATS_STORAGE_KEY]);
-  localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, data[CHART_ANCHOR_DATE_STORAGE_KEY]);
+  const importedState = buildImportedState(data, mode);
 
-  count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
-  theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
-  dailyStats = loadDailyStats();
-  chartAnchorDate = loadChartAnchorDate();
+  localStorage.setItem(COUNT_STORAGE_KEY, String(importedState.count));
+  localStorage.setItem(THEME_STORAGE_KEY, importedState.theme);
+  localStorage.setItem(DAILY_STATS_STORAGE_KEY, JSON.stringify(importedState.dailyStats));
+  localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, importedState.anchorDate);
+
+  count = importedState.count;
+  theme = importedState.theme;
+  dailyStats = importedState.dailyStats;
+  chartAnchorDate = importedState.anchorDate;
   bestStreak = calculateBestStreakFromHistory();
   persistBestStreak();
 
-  if (selectedIsoDate && parseCount(String(dailyStats.historyByDate[selectedIsoDate] ?? "0")) <= 0) {
-    selectedIsoDate = null;
-  }
+  hoveredBarIndex = null;
+  hideTooltip();
+  selectedIsoDate = null;
   updateSelectedBarInfo();
 
   syncDateAndRefresh();
   renderCounts();
   renderTheme();
-  showImportMessage("导入成功：数据已恢复并刷新页面状态。", "success");
-  console.log("[import] success");
+
+  const modeText = mode === "merge" ? "合并导入" : "覆盖导入";
+  showImportMessage(`导入成功：已完成${modeText}并刷新页面状态。`, "success");
+  console.log("[import] success", mode);
 }
 
 function handleImportFileSelection(event) {

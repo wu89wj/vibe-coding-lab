@@ -76,4 +76,6 @@ python3 -m http.server 8000
 
 - 2026-03-04: add chart week navigation (上一周/下一周) with persisted anchorDate window in localStorage
 
+- 2026-03-04: fix import to support merge/overwrite modes, preserve historyByDate on merge, and auto-jump chart anchor after import
+
 <!-- CODEX_CHANGELOG_END -->
