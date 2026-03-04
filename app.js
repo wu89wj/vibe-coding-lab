@@ -3,12 +3,15 @@ console.log("[app] loaded");
 const COUNT_STORAGE_KEY = "vibe-coding-lab-click-count";
 const THEME_STORAGE_KEY = "vibe-coding-lab-theme";
 const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
+const BEST_STREAK_STORAGE_KEY = "vibe-coding-lab-best-streak";
 
 const PROJECT_STORAGE_KEYS = [COUNT_STORAGE_KEY, THEME_STORAGE_KEY, DAILY_STATS_STORAGE_KEY];
 
 let countElement;
 let todayCountElement;
 let maxDailyCountElement;
+let streakElement;
+let bestStreakElement;
 let historyChart;
 let incrementButton;
 let resetButton;
@@ -22,6 +25,7 @@ let importMessageElement;
 let count = 0;
 let theme = "light";
 let dailyStats;
+let bestStreak = 0;
 
 function getDateStringByOffset(offsetDays) {
   const date = new Date();
@@ -119,6 +123,54 @@ function getRecentSevenDaysData() {
   return data;
 }
 
+function calculateCurrentStreak() {
+  // streak：从今天向前逐天检查，点击数 > 0 连续累加，遇到 0/缺失即停止。
+  let streak = 0;
+  for (let offset = 0; ; offset += 1) {
+    const date = getDateStringByOffset(-offset);
+    const countForDate = parseCount(String(dailyStats.historyByDate[date] ?? "0"));
+    if (countForDate > 0) {
+      streak += 1;
+      continue;
+    }
+    break;
+  }
+  return streak;
+}
+
+function calculateBestStreakFromHistory() {
+  // bestStreak：扫描历史日期，找点击数 > 0 的最长连续日期段。
+  const positiveDates = Object.entries(dailyStats.historyByDate)
+    .filter(([, value]) => parseCount(String(value)) > 0)
+    .map(([date]) => date)
+    .sort();
+
+  if (positiveDates.length === 0) {
+    return 0;
+  }
+
+  let best = 1;
+  let current = 1;
+
+  for (let i = 1; i < positiveDates.length; i += 1) {
+    const prev = new Date(`${positiveDates[i - 1]}T00:00:00`);
+    const curr = new Date(`${positiveDates[i]}T00:00:00`);
+    const diffDays = Math.round((curr - prev) / (24 * 60 * 60 * 1000));
+    if (diffDays === 1) {
+      current += 1;
+      best = Math.max(best, current);
+    } else {
+      current = 1;
+    }
+  }
+
+  return best;
+}
+
+function persistBestStreak() {
+  localStorage.setItem(BEST_STREAK_STORAGE_KEY, String(bestStreak));
+}
+
 function drawRecentHistoryChart() {
   if (!historyChart) return;
   const ctx = historyChart.getContext("2d");
@@ -191,6 +243,11 @@ function renderCounts() {
   countElement.textContent = String(count);
   todayCountElement.textContent = String(dailyStats.todayCount);
   maxDailyCountElement.textContent = String(dailyStats.historyMaxDailyCount);
+  const currentStreak = calculateCurrentStreak();
+  bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
+  streakElement.textContent = String(currentStreak);
+  bestStreakElement.textContent = String(bestStreak);
+  persistBestStreak();
 }
 
 function persistCount() {
@@ -239,6 +296,7 @@ function clearAllData() {
   count = 0;
   theme = "light";
   dailyStats = getDefaultDailyStats();
+  bestStreak = 0;
 
   renderCounts();
   renderTheme();
@@ -362,6 +420,8 @@ function applyImportedBackup(backupObject) {
   count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
   theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   dailyStats = loadDailyStats();
+  bestStreak = calculateBestStreakFromHistory();
+  persistBestStreak();
 
   syncDateAndRefresh();
   renderCounts();
@@ -460,6 +520,8 @@ function initApp() {
   countElement = document.getElementById("count-value");
   todayCountElement = document.getElementById("today-count-value");
   maxDailyCountElement = document.getElementById("max-daily-count-value");
+  streakElement = document.getElementById("streak-value");
+  bestStreakElement = document.getElementById("best-streak-value");
   historyChart = document.getElementById("history-chart");
   incrementButton = document.getElementById("increment-btn");
   resetButton = document.getElementById("reset-btn");
@@ -474,6 +536,8 @@ function initApp() {
     countElement,
     todayCountElement,
     maxDailyCountElement,
+    streakElement,
+    bestStreakElement,
     historyChart,
     incrementButton,
     resetButton,
@@ -494,6 +558,9 @@ function initApp() {
   count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
   theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
   dailyStats = loadDailyStats();
+  bestStreak = parseCount(localStorage.getItem(BEST_STREAK_STORAGE_KEY));
+  bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
+  persistBestStreak();
 
   bindUI();
   syncDateAndRefresh();
