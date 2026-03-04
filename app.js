@@ -1,0 +1,899 @@
+console.log("[app] loaded");
+
+const COUNT_STORAGE_KEY = "vibe-coding-lab-click-count";
+const THEME_STORAGE_KEY = "vibe-coding-lab-theme";
+const DAILY_STATS_STORAGE_KEY = "vibe-coding-lab-daily-stats";
+const BEST_STREAK_STORAGE_KEY = "vibe-coding-lab-best-streak";
+const CHART_ANCHOR_DATE_STORAGE_KEY = "vibe-coding-lab-chart-anchor-date";
+
+const PROJECT_STORAGE_KEYS = [
+  COUNT_STORAGE_KEY,
+  THEME_STORAGE_KEY,
+  DAILY_STATS_STORAGE_KEY,
+  CHART_ANCHOR_DATE_STORAGE_KEY,
+];
+
+let countElement;
+let todayCountElement;
+let maxDailyCountElement;
+let streakElement;
+let bestStreakElement;
+let historyChart;
+let chartPanel;
+let selectedBarInfoElement;
+let chartTooltipElement;
+let incrementButton;
+let resetButton;
+let themeToggleButton;
+let clearAllButton;
+let exportButton;
+let importButton;
+let importFileInput;
+let importMessageElement;
+let prevWeekButton;
+let nextWeekButton;
+
+let count = 0;
+let theme = "light";
+let dailyStats;
+let bestStreak = 0;
+
+let chartBars = [];
+let hoveredBarIndex = null;
+let selectedIsoDate = null;
+let chartAnchorDate = getTodayDateString();
+
+function getDateStringByOffset(offsetDays) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getTodayDateString() {
+  return getDateStringByOffset(0);
+}
+
+
+function isValidIsoDate(dateText) {
+  return typeof dateText === "string" && /^\d{4}-\d{2}-\d{2}$/.test(dateText);
+}
+
+function getDateStringByOffsetFromIsoDate(isoDate, offsetDays) {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function loadChartAnchorDate() {
+  const saved = localStorage.getItem(CHART_ANCHOR_DATE_STORAGE_KEY);
+  if (isValidIsoDate(saved)) {
+    return saved;
+  }
+  return getTodayDateString();
+}
+
+function persistChartAnchorDate() {
+  localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, chartAnchorDate);
+}
+
+function shiftChartAnchorDate(dayDelta) {
+  chartAnchorDate = getDateStringByOffsetFromIsoDate(chartAnchorDate, dayDelta);
+  persistChartAnchorDate();
+}
+
+function parseCount(value) {
+  const parsed = Number.parseInt(value ?? "0", 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function showImportMessage(message, type) {
+  if (!importMessageElement) return;
+  importMessageElement.textContent = message;
+  importMessageElement.className = `message ${type}`;
+}
+
+function getDefaultDailyStats() {
+  return {
+    currentDate: getTodayDateString(),
+    todayCount: 0,
+    historyMaxDailyCount: 0,
+    historyByDate: {},
+  };
+}
+
+function normalizeHistoryByDate(rawHistoryByDate) {
+  const normalized = {};
+  if (!rawHistoryByDate || typeof rawHistoryByDate !== "object") {
+    return normalized;
+  }
+
+  Object.entries(rawHistoryByDate).forEach(([date, value]) => {
+    normalized[date] = parseCount(String(value));
+  });
+  return normalized;
+}
+
+function loadDailyStats() {
+  const raw = localStorage.getItem(DAILY_STATS_STORAGE_KEY);
+  if (!raw) {
+    return getDefaultDailyStats();
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      currentDate: typeof parsed.currentDate === "string" ? parsed.currentDate : getTodayDateString(),
+      todayCount: parseCount(String(parsed.todayCount ?? "0")),
+      historyMaxDailyCount: parseCount(String(parsed.historyMaxDailyCount ?? "0")),
+      historyByDate: normalizeHistoryByDate(parsed.historyByDate),
+    };
+  } catch {
+    return getDefaultDailyStats();
+  }
+}
+
+function normalizeDailyStatsForToday() {
+  const today = getTodayDateString();
+  if (dailyStats.currentDate !== today) {
+    dailyStats.currentDate = today;
+    dailyStats.todayCount = 0;
+    persistDailyStats();
+    return true;
+  }
+  return false;
+}
+
+function syncDateAndRefresh() {
+  const didDateChange = normalizeDailyStatsForToday();
+  if (didDateChange) {
+    renderCounts();
+    drawRecentHistoryChart();
+  }
+}
+
+function getRecentSevenDaysData() {
+  const data = [];
+  for (let offset = -6; offset <= 0; offset += 1) {
+    const date = getDateStringByOffsetFromIsoDate(chartAnchorDate, offset);
+    data.push({
+      date,
+      count: parseCount(String(dailyStats.historyByDate[date] ?? "0")),
+    });
+  }
+  return data;
+}
+
+function calculateCurrentStreak() {
+  // streak：从今天向前逐天检查，点击数 > 0 连续累加，遇到 0/缺失即停止。
+  let streak = 0;
+  for (let offset = 0; ; offset += 1) {
+    const date = getDateStringByOffset(-offset);
+    const countForDate = parseCount(String(dailyStats.historyByDate[date] ?? "0"));
+    if (countForDate > 0) {
+      streak += 1;
+      continue;
+    }
+    break;
+  }
+  return streak;
+}
+
+function calculateBestStreakFromHistory() {
+  // bestStreak：扫描历史日期，找点击数 > 0 的最长连续日期段。
+  const positiveDates = Object.entries(dailyStats.historyByDate)
+    .filter(([, value]) => parseCount(String(value)) > 0)
+    .map(([date]) => date)
+    .sort();
+
+  if (positiveDates.length === 0) {
+    return 0;
+  }
+
+  let best = 1;
+  let current = 1;
+
+  for (let i = 1; i < positiveDates.length; i += 1) {
+    const prev = new Date(`${positiveDates[i - 1]}T00:00:00`);
+    const curr = new Date(`${positiveDates[i]}T00:00:00`);
+    const diffDays = Math.round((curr - prev) / (24 * 60 * 60 * 1000));
+    if (diffDays === 1) {
+      current += 1;
+      best = Math.max(best, current);
+    } else {
+      current = 1;
+    }
+  }
+
+  return best;
+}
+
+function persistBestStreak() {
+  localStorage.setItem(BEST_STREAK_STORAGE_KEY, String(bestStreak));
+}
+
+function updateSelectedBarInfo() {
+  if (!selectedBarInfoElement) return;
+  if (!selectedIsoDate) {
+    selectedBarInfoElement.textContent = "";
+    return;
+  }
+
+  const selectedCount = parseCount(String(dailyStats.historyByDate[selectedIsoDate] ?? "0"));
+  selectedBarInfoElement.textContent = `已选：${selectedIsoDate}（${selectedCount} 次）`;
+}
+
+function hideTooltip() {
+  if (!chartTooltipElement) return;
+  chartTooltipElement.hidden = true;
+}
+
+function updateTooltipPosition(mouseX, mouseY) {
+  if (!chartTooltipElement || !chartPanel) return;
+
+  const panelRect = chartPanel.getBoundingClientRect();
+  const tooltipRect = chartTooltipElement.getBoundingClientRect();
+
+  let left = mouseX - panelRect.left + 12;
+  let top = mouseY - panelRect.top + 12;
+
+  const maxLeft = panelRect.width - tooltipRect.width - 6;
+  const maxTop = panelRect.height - tooltipRect.height - 6;
+
+  left = Math.max(6, Math.min(left, maxLeft));
+  top = Math.max(6, Math.min(top, maxTop));
+
+  chartTooltipElement.style.left = `${left}px`;
+  chartTooltipElement.style.top = `${top}px`;
+}
+
+function showTooltipForIndex(index, mouseX, mouseY) {
+  if (!chartTooltipElement) return;
+  const item = chartBars[index];
+  if (!item) return;
+
+  chartTooltipElement.innerHTML = `${item.isoDate}<br />点击次数：${item.value}`;
+  chartTooltipElement.hidden = false;
+  updateTooltipPosition(mouseX, mouseY);
+}
+
+function getHoveredBarIndexFromPoint(canvasX, canvasY) {
+  for (let i = 0; i < chartBars.length; i += 1) {
+    const bar = chartBars[i];
+    if (canvasX >= bar.x && canvasX <= bar.x + bar.width && canvasY >= bar.y && canvasY <= bar.y + bar.height) {
+      return i;
+    }
+  }
+  return null;
+}
+
+function handleChartMouseMove(event) {
+  if (!historyChart) return;
+  const rect = historyChart.getBoundingClientRect();
+  const scaleX = historyChart.width / rect.width;
+  const scaleY = historyChart.height / rect.height;
+  const x = (event.clientX - rect.left) * scaleX;
+  const y = (event.clientY - rect.top) * scaleY;
+  const hoveredIndex = getHoveredBarIndexFromPoint(x, y);
+
+  if (hoveredIndex === null) {
+    if (hoveredBarIndex !== null) {
+      hoveredBarIndex = null;
+      hideTooltip();
+      drawRecentHistoryChart();
+    }
+    return;
+  }
+
+  showTooltipForIndex(hoveredIndex, event.clientX, event.clientY);
+
+  if (hoveredBarIndex !== hoveredIndex) {
+    hoveredBarIndex = hoveredIndex;
+    drawRecentHistoryChart();
+  }
+}
+
+function handleChartMouseLeave() {
+  if (hoveredBarIndex !== null) {
+    hoveredBarIndex = null;
+    hideTooltip();
+    drawRecentHistoryChart();
+  }
+}
+
+function handleChartClick(event) {
+  if (!historyChart) return;
+  console.log("[chart] click");
+
+  const rect = historyChart.getBoundingClientRect();
+  const scaleX = historyChart.width / rect.width;
+  const scaleY = historyChart.height / rect.height;
+  const x = (event.clientX - rect.left) * scaleX;
+  const y = (event.clientY - rect.top) * scaleY;
+  const index = getHoveredBarIndexFromPoint(x, y);
+
+  if (index === null) {
+    selectedIsoDate = null;
+    updateSelectedBarInfo();
+    drawRecentHistoryChart();
+    return;
+  }
+
+  const hitBar = chartBars[index];
+  console.log("[chart] hit", hitBar.isoDate, hitBar.value);
+
+  selectedIsoDate = selectedIsoDate === hitBar.isoDate ? null : hitBar.isoDate;
+  updateSelectedBarInfo();
+  drawRecentHistoryChart();
+}
+
+function drawRecentHistoryChart() {
+  if (!historyChart) return;
+  const ctx = historyChart.getContext("2d");
+  const data = getRecentSevenDaysData();
+  if (selectedIsoDate && !data.some((item) => item.date === selectedIsoDate)) {
+    selectedIsoDate = null;
+    updateSelectedBarInfo();
+  }
+  chartBars = [];
+
+  const styles = getComputedStyle(document.body);
+  const gridColor = styles.getPropertyValue("--chart-grid-color").trim();
+  const axisColor = styles.getPropertyValue("--chart-axis-color").trim();
+  const barColor = styles.getPropertyValue("--chart-bar-color").trim();
+  const labelColor = styles.getPropertyValue("--chart-label-color").trim();
+
+  const cssWidth = historyChart.clientWidth || 560;
+  const cssHeight = historyChart.clientHeight || 220;
+  const dpr = window.devicePixelRatio || 1;
+  historyChart.width = Math.floor(cssWidth * dpr);
+  historyChart.height = Math.floor(cssHeight * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const margin = { top: 16, right: 10, bottom: 28, left: 34 };
+  const plotWidth = cssWidth - margin.left - margin.right;
+  const plotHeight = cssHeight - margin.top - margin.bottom;
+  const maxValue = Math.max(...data.map((item) => item.count), 1);
+
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const y = margin.top + (plotHeight / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(margin.left, y);
+    ctx.lineTo(margin.left + plotWidth, y);
+    ctx.stroke();
+  }
+
+  ctx.strokeStyle = axisColor;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(margin.left, margin.top);
+  ctx.lineTo(margin.left, margin.top + plotHeight);
+  ctx.lineTo(margin.left + plotWidth, margin.top + plotHeight);
+  ctx.stroke();
+
+  const slotWidth = plotWidth / data.length;
+  const barWidth = Math.max(slotWidth * 0.56, 10);
+  ctx.fillStyle = barColor;
+
+  data.forEach((item, index) => {
+    const normalized = item.count / maxValue;
+    const barHeight = Math.max(normalized * (plotHeight - 4), 2);
+    const x = margin.left + slotWidth * index + (slotWidth - barWidth) / 2;
+    const y = margin.top + plotHeight - barHeight;
+
+    const isHovered = hoveredBarIndex === index;
+    const isSelected = selectedIsoDate === item.date;
+
+    ctx.fillStyle = isSelected ? axisColor : barColor;
+    ctx.fillRect(x, y, barWidth, barHeight);
+
+    if (isHovered || isSelected) {
+      ctx.strokeStyle = labelColor;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, barWidth, barHeight);
+    }
+
+    const scaleX = historyChart.width / cssWidth;
+    const scaleY = historyChart.height / cssHeight;
+
+    chartBars.push({
+      index,
+      isoDate: item.date,
+      value: item.count,
+      x: x * scaleX,
+      y: y * scaleY,
+      width: barWidth * scaleX,
+      height: barHeight * scaleY,
+    });
+  });
+
+  ctx.fillStyle = labelColor;
+  ctx.font = "12px sans-serif";
+  ctx.textAlign = "center";
+
+  data.forEach((item, index) => {
+    const x = margin.left + slotWidth * index + slotWidth / 2;
+    const shortDate = item.date.slice(5);
+    ctx.fillText(shortDate, x, margin.top + plotHeight + 16);
+    ctx.fillText(String(item.count), x, margin.top + plotHeight - 6);
+  });
+}
+
+function renderCounts() {
+  if (!countElement) return;
+  countElement.textContent = String(count);
+  todayCountElement.textContent = String(dailyStats.todayCount);
+  maxDailyCountElement.textContent = String(dailyStats.historyMaxDailyCount);
+  const currentStreak = calculateCurrentStreak();
+  bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
+  streakElement.textContent = String(currentStreak);
+  bestStreakElement.textContent = String(bestStreak);
+  persistBestStreak();
+}
+
+function persistCount() {
+  localStorage.setItem(COUNT_STORAGE_KEY, String(count));
+}
+
+function persistDailyStats() {
+  localStorage.setItem(DAILY_STATS_STORAGE_KEY, JSON.stringify(dailyStats));
+}
+
+function persistTheme() {
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+}
+
+function renderTheme() {
+  document.body.classList.toggle("theme-dark", theme === "dark");
+  if (themeToggleButton) {
+    themeToggleButton.textContent = theme === "dark" ? "☀️ 暗黑模式：开" : "🌙 暗黑模式：关";
+  }
+  drawRecentHistoryChart();
+}
+
+function incrementCounters() {
+  normalizeDailyStatsForToday();
+
+  count += 1;
+  dailyStats.todayCount += 1;
+  const today = dailyStats.currentDate;
+  dailyStats.historyByDate[today] = dailyStats.todayCount;
+
+  if (dailyStats.todayCount > dailyStats.historyMaxDailyCount) {
+    dailyStats.historyMaxDailyCount = dailyStats.todayCount;
+  }
+
+  renderCounts();
+  drawRecentHistoryChart();
+  persistCount();
+  persistDailyStats();
+}
+
+function clearAllData() {
+  localStorage.removeItem(COUNT_STORAGE_KEY);
+  localStorage.removeItem(THEME_STORAGE_KEY);
+  localStorage.removeItem(DAILY_STATS_STORAGE_KEY);
+  localStorage.removeItem(CHART_ANCHOR_DATE_STORAGE_KEY);
+
+  count = 0;
+  theme = "light";
+  dailyStats = getDefaultDailyStats();
+  bestStreak = 0;
+  chartAnchorDate = getTodayDateString();
+  selectedIsoDate = null;
+  updateSelectedBarInfo();
+
+  renderCounts();
+  renderTheme();
+}
+
+function exportProjectData() {
+  console.log("[export] clicked");
+  try {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      data: {
+        [COUNT_STORAGE_KEY]: localStorage.getItem(COUNT_STORAGE_KEY) ?? "0",
+        [THEME_STORAGE_KEY]: localStorage.getItem(THEME_STORAGE_KEY) ?? "light",
+        [DAILY_STATS_STORAGE_KEY]:
+          localStorage.getItem(DAILY_STATS_STORAGE_KEY) ?? JSON.stringify(getDefaultDailyStats()),
+        [CHART_ANCHOR_DATE_STORAGE_KEY]: localStorage.getItem(CHART_ANCHOR_DATE_STORAGE_KEY) ?? getTodayDateString(),
+      },
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `vibe-coding-lab-backup-${getTodayDateString()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showImportMessage("导出成功：备份文件已下载。", "success");
+  } catch (error) {
+    console.error("[export] failed", error);
+    alert("导出失败，请打开控制台查看错误详情。");
+  }
+}
+
+function validateBackupObject(backupObject) {
+  if (!backupObject || typeof backupObject !== "object" || Array.isArray(backupObject)) {
+    return "备份文件格式错误：根节点必须是对象。";
+  }
+
+  if (!backupObject.data || typeof backupObject.data !== "object" || Array.isArray(backupObject.data)) {
+    return "备份文件格式错误：缺少 data 对象。";
+  }
+
+  const data = backupObject.data;
+  for (const key of PROJECT_STORAGE_KEYS) {
+    if (!(key in data)) {
+      return `备份文件缺少必要字段：${key}`;
+    }
+  }
+
+  if (typeof data[COUNT_STORAGE_KEY] !== "string") {
+    return `${COUNT_STORAGE_KEY} 类型错误，应为字符串数字。`;
+  }
+
+  if (typeof data[THEME_STORAGE_KEY] !== "string" || !["light", "dark"].includes(data[THEME_STORAGE_KEY])) {
+    return `${THEME_STORAGE_KEY} 类型错误，应为 light 或 dark。`;
+  }
+
+  if (typeof data[DAILY_STATS_STORAGE_KEY] !== "string") {
+    return `${DAILY_STATS_STORAGE_KEY} 类型错误，应为 JSON 字符串。`;
+  }
+
+  if (typeof data[CHART_ANCHOR_DATE_STORAGE_KEY] !== "string" || !isValidIsoDate(data[CHART_ANCHOR_DATE_STORAGE_KEY])) {
+    return `${CHART_ANCHOR_DATE_STORAGE_KEY} 类型错误，应为 YYYY-MM-DD。`;
+  }
+
+  let parsedDailyStats;
+  try {
+    parsedDailyStats = JSON.parse(data[DAILY_STATS_STORAGE_KEY]);
+  } catch {
+    return `${DAILY_STATS_STORAGE_KEY} 解析失败，不是合法 JSON。`;
+  }
+
+  if (!parsedDailyStats || typeof parsedDailyStats !== "object" || Array.isArray(parsedDailyStats)) {
+    return `${DAILY_STATS_STORAGE_KEY} 内容错误：应为对象。`;
+  }
+
+  if (typeof parsedDailyStats.currentDate !== "string") {
+    return "daily-stats.currentDate 类型错误，应为字符串。";
+  }
+  if (typeof parsedDailyStats.todayCount !== "number") {
+    return "daily-stats.todayCount 类型错误，应为数字。";
+  }
+  if (typeof parsedDailyStats.historyMaxDailyCount !== "number") {
+    return "daily-stats.historyMaxDailyCount 类型错误，应为数字。";
+  }
+  if (
+    !parsedDailyStats.historyByDate ||
+    typeof parsedDailyStats.historyByDate !== "object" ||
+    Array.isArray(parsedDailyStats.historyByDate)
+  ) {
+    return "daily-stats.historyByDate 类型错误，应为对象。";
+  }
+
+  for (const value of Object.values(parsedDailyStats.historyByDate)) {
+    if (typeof value !== "number") {
+      return "daily-stats.historyByDate 的值必须全部为数字。";
+    }
+  }
+
+  return null;
+}
+
+function normalizeDailyStatsFromObject(rawStats) {
+  const fallback = getDefaultDailyStats();
+  const currentDate = isValidIsoDate(rawStats?.currentDate) ? rawStats.currentDate : fallback.currentDate;
+  return {
+    currentDate,
+    todayCount: parseCount(String(rawStats?.todayCount ?? "0")),
+    historyMaxDailyCount: parseCount(String(rawStats?.historyMaxDailyCount ?? "0")),
+    historyByDate: normalizeHistoryByDate(rawStats?.historyByDate),
+  };
+}
+
+function getMaxHistoryDate(historyByDate) {
+  const validDates = Object.keys(historyByDate || {}).filter((date) => isValidIsoDate(date));
+  if (validDates.length === 0) {
+    return null;
+  }
+  return validDates.sort().at(-1) ?? null;
+}
+
+function recalculateDerivedDailyStats(stats) {
+  const values = Object.values(stats.historyByDate).map((value) => parseCount(String(value)));
+  stats.historyMaxDailyCount = values.length > 0 ? Math.max(...values) : 0;
+  stats.todayCount = parseCount(String(stats.historyByDate[stats.currentDate] ?? "0"));
+  return stats;
+}
+
+function getImportMode() {
+  const shouldContinue = confirm("将导入数据并更新当前页面，是否继续？");
+  if (!shouldContinue) {
+    return null;
+  }
+
+  const useMergeMode = confirm(
+    "导入模式选择：点击“确定”使用【合并导入（推荐）】；点击“取消”使用【覆盖导入】。"
+  );
+  return useMergeMode ? "merge" : "overwrite";
+}
+
+function buildImportedState(data, mode) {
+  const importedCount = parseCount(data[COUNT_STORAGE_KEY]);
+  const importedTheme = data[THEME_STORAGE_KEY] === "dark" ? "dark" : "light";
+  const importedDailyStats = normalizeDailyStatsFromObject(JSON.parse(data[DAILY_STATS_STORAGE_KEY]));
+
+  if (mode === "overwrite") {
+    const overwriteDailyStats = recalculateDerivedDailyStats(importedDailyStats);
+    const anchorDate =
+      importedDailyStats.currentDate || getMaxHistoryDate(importedDailyStats.historyByDate) || getTodayDateString();
+
+    return {
+      count: importedCount,
+      theme: importedTheme,
+      dailyStats: overwriteDailyStats,
+      anchorDate,
+    };
+  }
+
+  const existingDailyStats = loadDailyStats();
+  const mergedHistoryByDate = { ...existingDailyStats.historyByDate };
+  Object.entries(importedDailyStats.historyByDate).forEach(([isoDate, importedValue]) => {
+    const existingValue = parseCount(String(mergedHistoryByDate[isoDate] ?? "0"));
+    mergedHistoryByDate[isoDate] = Math.max(existingValue, parseCount(String(importedValue)));
+  });
+
+  const mergedDailyStats = recalculateDerivedDailyStats({
+    currentDate: importedDailyStats.currentDate,
+    todayCount: 0,
+    historyMaxDailyCount: 0,
+    historyByDate: mergedHistoryByDate,
+  });
+
+  const mergedAnchorDate = importedDailyStats.currentDate || getMaxHistoryDate(importedDailyStats.historyByDate) || getTodayDateString();
+
+  return {
+    count: Math.max(parseCount(localStorage.getItem(COUNT_STORAGE_KEY)), importedCount),
+    theme: importedTheme,
+    dailyStats: mergedDailyStats,
+    anchorDate: mergedAnchorDate,
+  };
+}
+
+function applyImportedBackup(backupObject) {
+  const validationError = validateBackupObject(backupObject);
+  if (validationError) {
+    const message = `导入失败：${validationError}`;
+    showImportMessage(message, "error");
+    alert(message);
+    return;
+  }
+
+  const mode = getImportMode();
+  if (!mode) {
+    showImportMessage("已取消导入。", "info");
+    return;
+  }
+
+  const data = backupObject.data;
+  const importedState = buildImportedState(data, mode);
+
+  localStorage.setItem(COUNT_STORAGE_KEY, String(importedState.count));
+  localStorage.setItem(THEME_STORAGE_KEY, importedState.theme);
+  localStorage.setItem(DAILY_STATS_STORAGE_KEY, JSON.stringify(importedState.dailyStats));
+  localStorage.setItem(CHART_ANCHOR_DATE_STORAGE_KEY, importedState.anchorDate);
+
+  count = importedState.count;
+  theme = importedState.theme;
+  dailyStats = importedState.dailyStats;
+  chartAnchorDate = importedState.anchorDate;
+  bestStreak = calculateBestStreakFromHistory();
+  persistBestStreak();
+
+  hoveredBarIndex = null;
+  hideTooltip();
+  selectedIsoDate = null;
+  updateSelectedBarInfo();
+
+  syncDateAndRefresh();
+  renderCounts();
+  renderTheme();
+
+  const modeText = mode === "merge" ? "合并导入" : "覆盖导入";
+  showImportMessage(`导入成功：已完成${modeText}并刷新页面状态。`, "success");
+  console.log("[import] success", mode);
+}
+
+function handleImportFileSelection(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) {
+    return;
+  }
+
+  console.log("[import] file selected");
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const backupObject = JSON.parse(String(reader.result));
+      applyImportedBackup(backupObject);
+    } catch (error) {
+      console.error("[import] invalid JSON", error);
+      showImportMessage("导入失败：文件不是合法 JSON。", "error");
+      alert("导入失败：文件不是合法 JSON。");
+    }
+  };
+  reader.onerror = (error) => {
+    console.error("[import] file read failed", error);
+    showImportMessage("导入失败：读取文件时发生错误。", "error");
+    alert("导入失败：读取文件时发生错误。");
+  };
+  reader.readAsText(file, "utf-8");
+
+  event.target.value = "";
+}
+
+function bindUI() {
+  const missing = {
+    exportButton: !exportButton,
+    importButton: !importButton,
+    importFileInput: !importFileInput,
+    prevWeekButton: !prevWeekButton,
+    nextWeekButton: !nextWeekButton,
+  };
+  if (missing.exportButton || missing.importButton || missing.importFileInput || missing.prevWeekButton || missing.nextWeekButton) {
+    console.error("[bind] missing element", missing);
+    return;
+  }
+
+  incrementButton.addEventListener("click", incrementCounters);
+
+  resetButton.addEventListener("click", () => {
+    count = 0;
+    renderCounts();
+    persistCount();
+  });
+
+  themeToggleButton.addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    renderTheme();
+    persistTheme();
+  });
+
+  clearAllButton.addEventListener("click", () => {
+    const shouldClear = confirm("确认清空所有本地数据吗？此操作不可撤销。");
+    if (!shouldClear) {
+      return;
+    }
+    clearAllData();
+    showImportMessage("已清空所有数据。", "info");
+  });
+
+  exportButton.addEventListener("click", exportProjectData);
+
+  importButton.addEventListener("click", () => {
+    console.log("[import] clicked");
+    try {
+      importFileInput.click();
+    } catch (error) {
+      console.error("[import] failed to open file picker", error);
+      alert("导入失败：无法打开文件选择器。");
+    }
+  });
+
+  importFileInput.addEventListener("change", handleImportFileSelection);
+
+  prevWeekButton.addEventListener("click", () => {
+    shiftChartAnchorDate(-7);
+    hoveredBarIndex = null;
+    hideTooltip();
+    drawRecentHistoryChart();
+  });
+
+  nextWeekButton.addEventListener("click", () => {
+    shiftChartAnchorDate(7);
+    hoveredBarIndex = null;
+    hideTooltip();
+    drawRecentHistoryChart();
+  });
+
+  historyChart.addEventListener("mousemove", handleChartMouseMove);
+  historyChart.addEventListener("mouseleave", handleChartMouseLeave);
+  historyChart.addEventListener("click", handleChartClick);
+
+  window.addEventListener("resize", drawRecentHistoryChart);
+  window.addEventListener("focus", syncDateAndRefresh);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      syncDateAndRefresh();
+    }
+  });
+}
+
+function initApp() {
+  countElement = document.getElementById("count-value");
+  todayCountElement = document.getElementById("today-count-value");
+  maxDailyCountElement = document.getElementById("max-daily-count-value");
+  streakElement = document.getElementById("streak-value");
+  bestStreakElement = document.getElementById("best-streak-value");
+  historyChart = document.getElementById("history-chart");
+  chartPanel = document.getElementById("chart-panel");
+  selectedBarInfoElement = document.getElementById("selected-bar-info");
+  chartTooltipElement = document.getElementById("chart-tooltip");
+  incrementButton = document.getElementById("increment-btn");
+  resetButton = document.getElementById("reset-btn");
+  themeToggleButton = document.getElementById("theme-toggle-btn");
+  clearAllButton = document.getElementById("clear-all-btn");
+  exportButton = document.getElementById("export-btn");
+  importButton = document.getElementById("import-btn");
+  importFileInput = document.getElementById("import-file-input");
+  importMessageElement = document.getElementById("import-message");
+  prevWeekButton = document.getElementById("prev-week-btn");
+  nextWeekButton = document.getElementById("next-week-btn");
+
+  const requiredElements = [
+    countElement,
+    todayCountElement,
+    maxDailyCountElement,
+    streakElement,
+    bestStreakElement,
+    historyChart,
+    chartPanel,
+    selectedBarInfoElement,
+    chartTooltipElement,
+    incrementButton,
+    resetButton,
+    themeToggleButton,
+    clearAllButton,
+    exportButton,
+    importButton,
+    importFileInput,
+    importMessageElement,
+    prevWeekButton,
+    nextWeekButton,
+  ];
+
+  if (requiredElements.some((el) => !el)) {
+    console.error("[init] missing required DOM elements, app init aborted");
+    alert("页面初始化失败：缺少必要元素，请检查 HTML 结构。");
+    return;
+  }
+
+  count = parseCount(localStorage.getItem(COUNT_STORAGE_KEY));
+  theme = localStorage.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : "light";
+  dailyStats = loadDailyStats();
+  chartAnchorDate = loadChartAnchorDate();
+  bestStreak = parseCount(localStorage.getItem(BEST_STREAK_STORAGE_KEY));
+  bestStreak = Math.max(bestStreak, calculateBestStreakFromHistory());
+  persistBestStreak();
+  updateSelectedBarInfo();
+
+  bindUI();
+  syncDateAndRefresh();
+  renderCounts();
+  renderTheme();
+  showImportMessage("", "info");
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initApp);
+} else {
+  initApp();
+}
